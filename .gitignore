@@ -2,3 +2,4 @@ ytdlp-output/**
 data/**
 library/**
 source-dir/**
+.vscode/**

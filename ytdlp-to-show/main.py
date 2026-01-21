@@ -36,8 +36,11 @@ def get_filename_from_cd(cd: str) -> str | None:
 
 
 def download_file(
-    url: str, dest_dir: Path, override_filename: str | None = None
-) -> Path:
+    url: str,
+    dest_dir: Path,
+    override_filename: str | None = None,
+    overwrite: bool = False,
+) -> Path | None:
     """Download file url to path dest_dir [optionally with filename override_filename] while keeping original extension"""
     """# download_file("https://example.com/file?id=123", Path("/home/you/Downloads"), override_filename="my_new_name")"""
 
@@ -57,6 +60,9 @@ def download_file(
         filename = f"{override_filename}{ext}"
 
     out_file = dest_dir / filename
+
+    if out_file.exists() and not overwrite:
+        return None
 
     # Download the file in chunks
     with open(out_file, "wb") as f:
