@@ -211,8 +211,7 @@ def setup_ytdlp(
 def download_channel(
     url: str, output_root: Path, source_dir: Path | None = None
 ) -> tuple[Path, str | None]:
-    from cfsonarrmatcher import \
-        match_title_to_sonarr_show as match_title_to_show
+    from cfsonarrmatcher import match_title_to_sonarr_show as match_to_show
 
     setup_ytdlp(output_root, source_dir, skip_download=True, extract_flat=True)
 
@@ -232,54 +231,87 @@ def download_channel(
             if _dir.is_dir()
         )
 
-        result = match_title_to_show(channel_name, candidate_names)
+        result = match_to_show(channel_name, candidate_names)
 
         channel_srcname = (
             candidate_names[result.get("matched_id") or 0][0]
             if result.get("score", 0) > 70
             else None
         )
-    else:
-        setup_ytdlp(output_root, source_dir, skip_download=False, extract_flat=False)
+    # else:
+    setup_ytdlp(output_root, source_dir, skip_download=True, extract_flat=False)
 
-        download_archive = load_archive(output_root)
+    download_archive = load_archive(output_root)
 
-        urls_to_download: list[str] = []
+    urls_to_download: list[str] = []
 
-        for _entry in info.get("entries") or []:
+    for _entry in info.get("entries") or []:
+        _ytdlp_output_file = Path(
+            output_root
+            / Path(info.get("channel_id") or "")
+            / Path(_entry.get("id") or "")
+            # / "video.mkv"
+            / "video.info.json"
+        )
+
+        if not _entry:
+            continue
+        if download_archive:
+            if (
+                _entry.get("id")
+                in download_archive[info.get("extractor", "").split(":")[0]]
+            ):
+                continue
+        if _ytdlp_output_file.exists():
+            continue
+
+        urls_to_download.append(_entry.get("url") or "")
+
+    _tot = len(urls_to_download)
+    for _i, _url in enumerate(urls_to_download, start=1):
+        _log.msg(
+            f"Downloading info for video {_log._GREEN}{_i}{_log._RESET} of {_log._BLUE}{_tot}{_log._RESET}: {_log._YELLOW}{_url}{_log._RESET} "
+        )
+        with YoutubeDL(ytdlp_options) as ydl:  # pyright: ignore[reportArgumentType]
+            ydl.download(_url)
+
+    _log.msg("Download finished.")
+
+    channel_srcname = None
+
+    return channel_dir, channel_srcname
+
+
+def download_episode(output_root: Path, episode_info: dict) -> Path | None:
+    _url = episode_info.get("webpage_url")
+    if _url:
+        setup_ytdlp(output_root, None, skip_download=False, extract_flat=False)
+
+        # _log.msg(
+        #     f"Downloading episode {_log._GREEN}{_i}{_log._RESET} of {_log._BLUE}{_tot}{_log._RESET}: {_log._YELLOW}{_url}{_log._RESET} "
+        # )
+
+        with YoutubeDL(ytdlp_options) as ydl:  # pyright: ignore[reportArgumentType]
+            _info = ydl.extract_info(_url)
+
+            if _info is None:
+                return None
+
             _ytdlp_output_file = Path(
                 output_root
-                / Path(info.get("channel_id") or "")
-                / Path(_entry.get("id") or "")
+                / Path(_info.get("channel_id") or "")
+                / Path(_info.get("id") or "")
                 / "video.mkv"
             )
 
-            if not _entry:
-                continue
-            if download_archive:
-                if (
-                    _entry.get("id")
-                    in download_archive[info.get("extractor", "").split(":")[0]]
-                ):
-                    continue
-            if _ytdlp_output_file.exists():
-                continue
+        _log.msg("Episode download finished.")
 
-            urls_to_download.append(_entry.get("url") or "")
+        return _ytdlp_output_file
 
-        _tot = len(urls_to_download)
-        for _i, _url in enumerate(urls_to_download, start=1):
-            _log.msg(
-                f"Downloading {_log._GREEN}{_i}{_log._RESET} of {_log._BLUE}{_tot}{_log._RESET}: {_log._YELLOW}{_url}{_log._RESET} "
-            )
-            with YoutubeDL(ytdlp_options) as ydl:  # pyright: ignore[reportArgumentType]
-                ydl.download(_url)
+    else:
+        _log.msg("Episode download error; URL not present.")
 
-        _log.msg("Download finished.")
-
-        channel_srcname = None
-
-    return channel_dir, channel_srcname
+    return None
 
 
 # ----------------------------
@@ -407,8 +439,12 @@ def create_tvshow_nfo(channel_dir: Path, library_root: Path) -> tuple[Path, str]
 # ----------------------------
 
 
-def sort_videos_by_year(channel_dir: Path, abort_unmatched_year: bool = True):
+def sort_videos_by_year(
+    channel_dir: Path, abort_unmatched_year: bool = True
+) -> tuple[dict, int]:
     _vby = {}
+    _tot = 0
+
     for _ep_path in sorted(
         _dir
         for _dir in channel_dir.iterdir()
@@ -428,8 +464,9 @@ def sort_videos_by_year(channel_dir: Path, abort_unmatched_year: bool = True):
 
         _year = _upload_date.year
 
+        _tot += 1
         _vby.setdefault(_year, []).append((_upload_date, _ep_path, _info))
-    return _vby
+    return _vby, _tot
 
 
 def get_new_title(video_id: str) -> str | None:
@@ -544,7 +581,8 @@ def write_ep_nfo(
 def create_episode_nfos(
     channel_dir: Path, show_dir: Path, source_dir: Path | None = None
 ):
-    videos_by_year = sort_videos_by_year(channel_dir)
+    videos_by_year, total_videos = sort_videos_by_year(channel_dir)
+    ep_idx = 0
 
     for year, videos in videos_by_year.items():
         season_dir = show_dir / f"Season {year}"
@@ -553,38 +591,54 @@ def create_episode_nfos(
         videos.sort(key=lambda x: x[0])
 
         for episode_num, (date, _ep_path, _info) in enumerate(videos, start=1):
+            ep_idx += 1
             u_id = _info.get("id")
             u_id_type = _info.get("webpage_url_domain")
             orig_title = _info.get("title")
-
-            if source_dir:
-                _match = find_match(_info, source_dir)
-                _info["local_filename"] = (
-                    (source_dir / Path(_match)) if _match else None
-                )
-
-            if not _info.get("local_filename"):
-                if (_ep_path / "video.mkv").exists():
-                    # _log.msg("matched")
-                    _info["local_filename"] = _ep_path / "video.mkv"
-                else:
-                    # _log.msg("local_filename does not exist")
-                    # _log.msg(_info)
-                    continue
-
             title = get_new_title(u_id) or orig_title
-
             safe_title = sanitize(title)
+
+            episode_filename = (
+                f"{show_dir.name} - S{year}E{episode_num:02d} - {safe_title}"
+            )
+
+            _target_file = Path(season_dir / f"{episode_filename}.mkv")
+
+            _log.msg(
+                f"Processing episode {_log._GREEN}{ep_idx}{_log._RESET} of {_log._BLUE}{total_videos}{_log._RESET}: {_log._YELLOW}{orig_title}{_log._RESET} "
+            )
+
+            _match = find_match(_info, source_dir) if source_dir else None
+
+            if _target_file.exists():
+                if _target_file.with_suffix(".nfo").exists():
+                    _log.msg("Found target file with nfo in library, skip processing.")
+                    continue
+                else:
+                    _log.msg("Found target file in library, skip search/download.")
+            else:
+                if source_dir and _match:
+                    _info["local_filename"] = source_dir / Path(_match)
+                else:
+                    if (_ep_path / "video.mkv").exists():
+                        # _log.msg("already downloaded")
+                        _info["local_filename"] = _ep_path / "video.mkv"
+                    else:
+                        _info["local_filename"] = download_episode(
+                            channel_dir.parent, _info
+                        )
+
+                if not _info.get("local_filename"):
+                    _log.msg("local_filename does not exist")
+                    continue
 
             description = _info.get("description", "")
             aired = date.date().isoformat()
 
-            base_name = f"{show_dir.name} - S{year}E{episode_num:02d} - {safe_title}"
-
             # Episode NFO
             write_ep_nfo(
                 season_dir,
-                base_name,
+                episode_filename,
                 title,
                 orig_title,
                 year,
@@ -598,23 +652,26 @@ def create_episode_nfos(
             # Episode thumbnail
             thumbnail_url = _info.get("thumbnail", "")
             if thumbnail_url:
-                download_file(thumbnail_url, season_dir, f"{base_name}-thumb")
-
-            # use local path cue from _info instead of name-matching from _ep_path
+                _ret = download_file(
+                    thumbnail_url, season_dir, f"{episode_filename}-thumb"
+                )
+                if _ret:
+                    _log.msg(f"Downloaded thumbnail to {_ret}")
 
             _ep_file = Path(_info["local_filename"])
 
             for _img in itertools.chain(_ep_path.iterdir(), _ep_file.parent.iterdir()):
                 if _img.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
-                    _dest = (season_dir / base_name).with_suffix(_img.suffix)
+                    _dest = (season_dir / episode_filename).with_suffix(_img.suffix)
                     if not _dest.exists():
-                        _log.msg(f"Copying thumbnail {_img}")
+                        _log.msg(f"Copying image {_img}")
                         try:
                             os.link(_img, _dest)
                         except OSError:
                             shutil.copy2(_img, _dest)
+                    else:
+                        _log.msg(f"Image exists {_dest}")
 
-            _target_file = Path(season_dir / f"{base_name}.mkv")
             if not _target_file.exists():
                 _log.msg(f"Copying video {_info["local_filename"]}")
                 try:
@@ -627,6 +684,8 @@ def create_episode_nfos(
                         _info["local_filename"],
                         _target_file,
                     )
+            else:
+                _log.msg(f"Target video file exists {_target_file}")
 
             add_to_archive(_info.get("extractor") or "", u_id, channel_dir.parent)
 
