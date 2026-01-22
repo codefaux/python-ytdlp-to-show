@@ -211,7 +211,7 @@ def setup_ytdlp(
 def download_channel(
     url: str, output_root: Path, source_dir: Path | None = None
 ) -> tuple[Path, str | None]:
-    from cfsonarrmatcher import match_title_to_sonarr_show as match_to_show
+    from cfsonarrmatcher import match_to_show
 
     setup_ytdlp(output_root, source_dir, skip_download=True, extract_flat=True)
 
