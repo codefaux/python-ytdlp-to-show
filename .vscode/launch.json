@@ -10,6 +10,9 @@
       "request": "launch",
       "program": "${workspaceFolder}/ytdlp-to-show/main.py",
       "console": "integratedTerminal",
+      "autoReload": {
+        "enable": true
+      },
       "python": "${workspaceFolder}/.venv/bin/python",
       "args": ["--url-file", "urls.json", "--download-dir", "ytdlp-output", "--library-dir", "library"],
       "env": {
@@ -21,6 +24,9 @@
       "request": "launch",
       "program": "${workspaceFolder}/ytdlp-to-show/main.py",
       "console": "integratedTerminal",
+      "autoReload": {
+        "enable": true
+      },
       "python": "${workspaceFolder}/.venv/bin/python",
       "args": ["--url-file", "urls.json", "--download-dir", "ytdlp-output", "--library-dir", "library","--source-dir","source-dir"],
       "env": {
