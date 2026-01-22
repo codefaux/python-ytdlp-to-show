@@ -242,7 +242,7 @@ def download_channel(
 
     setup_ytdlp(output_root, source_dir, skip_download=True, extract_flat=True)
 
-    _log.msg(f"Downloading videos from {url} to {output_root} ")
+    _log.msg(f"Downloading video info from {url} to {output_root} ")
 
     with YoutubeDL(ytdlp_options) as ydl:  # pyright: ignore[reportArgumentType]
         info = ydl.extract_info(url, download=True)
@@ -697,7 +697,7 @@ def create_episode_nfos(
                     thumbnail_url, season_dir, f"{episode_filename}-thumb"
                 )
                 if _ret:
-                    _log.msg(f"Downloaded thumbnail to {_ret}")
+                    _log.msg(f"Downloaded thumbnail to library:\n\tDEST: {_ret}")
 
             _ep_file = Path(_info["local_filename"])
 
@@ -705,7 +705,9 @@ def create_episode_nfos(
                 if _img.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
                     _dest = (season_dir / episode_filename).with_suffix(_img.suffix)
                     if not _dest.exists():
-                        _log.msg(f"Copying image {_img}")
+                        _log.msg(
+                            f"Copying image to library;\n\tSRC: {_img}\n\tDEST: {_dest}"
+                        )
                         try:
                             os.link(_img, _dest)
                         except OSError:
@@ -714,7 +716,9 @@ def create_episode_nfos(
                         _log.msg(f"Image exists {_dest}")
 
             if not _target_file.exists():
-                _log.msg(f"Copying video {_info["local_filename"]}")
+                _log.msg(
+                    f"Copying video to library;\n\tSRC: {_info["local_filename"]}\n\tDEST: {_target_file}"
+                )
                 try:
                     os.link(
                         _info["local_filename"],
