@@ -5,6 +5,7 @@ import json
 import os
 import re
 import shutil
+import time
 from pathlib import Path
 
 import dateutil
@@ -13,6 +14,7 @@ import requests
 import yt_dlp
 import yt_dlp.options
 from yt_dlp import YoutubeDL
+from yt_dlp.utils import DownloadError
 
 DATA_DIR = os.getenv("DATA_DIR") or "./data"
 ytdlpconf_file = os.path.join(DATA_DIR, "yt-dlp.conf")
@@ -176,6 +178,24 @@ def load_archive(ytdlp_data_path: Path) -> dict[str, list[str]] | None:
     return entries
 
 
+dl_last_bytes = 0
+dl_last_change = time.time()
+
+
+def anti_stall(info):
+
+    global dl_last_bytes, dl_last_change
+
+    if info["status"] == "downloading":
+        downloaded = info.get("downloaded_bytes", 0)
+
+        if downloaded != dl_last_bytes:
+            dl_last_bytes = downloaded
+            dl_last_change = time.time()
+        elif time.time() - dl_last_change > 20:
+            raise DownloadError("Anti-Stall: No progress detected")
+
+
 def setup_ytdlp(
     output_root: Path,
     source_dir: Path | None = None,
@@ -189,6 +209,11 @@ def setup_ytdlp(
 
     ytdlp_options.update(
         {
+            "socket_timeout": 23,
+            "retries": 2,
+            "fragment_retries": 2,
+            "throttled_rate": 102400,
+            "progress_hooks": [anti_stall],
             "match_filter": duration_filter,
             "skip_download": skip_download,
             "restrictfilenames": True,
@@ -203,6 +228,8 @@ def setup_ytdlp(
             "max_sleep_interval": 1 if skip_downloads else 180,
             "sleep_interval_requests": 1 if skip_downloads else 2,
             "concurrent_fragment_downloads": 1 if skip_downloads else 2,
+            "continuedl": True,
+            "nopart": False,
             # "playlist_items": "1-3",
         }
     )
@@ -286,28 +313,37 @@ def download_episode(output_root: Path, episode_info: dict) -> Path | None:
     _url = episode_info.get("webpage_url")
     if _url:
         setup_ytdlp(output_root, None, skip_download=False, extract_flat=False)
+        _attempt = 0
+        _max_attempt = 2
 
-        # _log.msg(
-        #     f"Downloading episode {_log._GREEN}{_i}{_log._RESET} of {_log._BLUE}{_tot}{_log._RESET}: {_log._YELLOW}{_url}{_log._RESET} "
-        # )
+        while _attempt < _max_attempt:
+            _attempt += 1
+            with YoutubeDL(ytdlp_options) as ydl:  # pyright: ignore[reportArgumentType]
+                _info = None
+                try:
+                    _info = ydl.extract_info(_url)
 
-        with YoutubeDL(ytdlp_options) as ydl:  # pyright: ignore[reportArgumentType]
-            _info = ydl.extract_info(_url)
+                    if _info is None:
+                        return None
 
-            if _info is None:
-                return None
+                    _ytdlp_output_file = Path(
+                        output_root
+                        / Path(_info.get("channel_id") or "")
+                        / Path(_info.get("id") or "")
+                        / "video.mkv"
+                    )
 
-            _ytdlp_output_file = Path(
-                output_root
-                / Path(_info.get("channel_id") or "")
-                / Path(_info.get("id") or "")
-                / "video.mkv"
-            )
+                    _log.msg("Episode download finished.")
 
-        _log.msg("Episode download finished.")
+                    return _ytdlp_output_file
 
-        return _ytdlp_output_file
+                except DownloadError as e:
+                    _log.msg(f"Download error: {e.msg}")
+                    _log.msg("Pausing for 30 sec.")
+                    time.sleep(30)
 
+        _log.msg("Max retries.")
+        raise RuntimeError("Max download attempts exceeded")
     else:
         _log.msg("Episode download error; URL not present.")
 
