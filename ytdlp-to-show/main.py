@@ -426,10 +426,14 @@ def create_tvshow_nfo(channel_dir: Path, library_root: Path) -> tuple[Path, str]
         encoding="utf-8",
     )
 
-    for _img in info_dir.iterdir():
-        if _img.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
-            _dest = (show_dir / show_name).with_suffix(_img.suffix)
-            shutil.copy(_img, _dest)
+        for _img in info_dir.iterdir():
+            if _img.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
+                _dest = (show_dir / show_name).with_suffix(_img.suffix)
+                _log.msg(f"Copying image {_img}")
+                try:
+                    os.link(_img, _dest)
+                except OSError:
+                    shutil.copy2(_img, _dest)
 
     return show_dir, show_name
 
