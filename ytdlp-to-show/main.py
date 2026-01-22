@@ -409,13 +409,11 @@ def create_tvshow_nfo(channel_dir: Path, library_root: Path) -> tuple[Path, str]
     u_id_type = first_info.get("webpage_url_domain")
     show_dir = library_root / show_name
     show_dir.mkdir(parents=True, exist_ok=True)
-    image_data = first_info.get("thumbnails", [])
-
-    download_show_images(image_data, show_dir)
 
     tvshow_nfo = show_dir / "tvshow.nfo"
-    tvshow_nfo.write_text(
-        f"""<?xml version="1.0" encoding="UTF-8"?>
+    if not tvshow_nfo.exists():
+        tvshow_nfo.write_text(
+            f"""<?xml version="1.0" encoding="UTF-8"?>
 <tvshow>
   <title>{show_name}</title>
   <plot>{description}</plot>
@@ -423,8 +421,11 @@ def create_tvshow_nfo(channel_dir: Path, library_root: Path) -> tuple[Path, str]
   <studio>{u_id_type}</studio>
 </tvshow>
 """,
-        encoding="utf-8",
-    )
+            encoding="utf-8",
+        )
+
+        image_data = first_info.get("thumbnails", [])
+        download_show_images(image_data, show_dir)
 
         for _img in info_dir.iterdir():
             if _img.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
