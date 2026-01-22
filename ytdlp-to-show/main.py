@@ -518,13 +518,13 @@ def build_candidates(source_dir: Path) -> list[dict]:
 
 
 def find_match(video_info: dict, source_dir: Path) -> Path | None:
-    from cfsonarrmatcher import match_title_to_sonarr_episode
+    from cfsonarrmatcher import match_to_episode
 
     # Prep data and throw to python-cfsonarr-matcher
     # build candidate dict from source_dir
     cand_dict = build_candidates(source_dir)
 
-    output = match_title_to_sonarr_episode(video_info.get("title") or "", "", cand_dict)
+    output = match_to_episode(video_info.get("title") or "", "", cand_dict)
 
     # _log.msg(output)
     if (output.get("score") or 0) > 60:
