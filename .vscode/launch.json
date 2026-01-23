@@ -16,6 +16,7 @@
       "python": "${workspaceFolder}/.venv/bin/python",
       "args": ["--url-file", "urls.json", "--download-dir", "ytdlp-output", "--library-dir", "library"],
       "env": {
+        "MATCHER_THREADS": "12",
       }
     },
     {
@@ -30,6 +31,7 @@
       "python": "${workspaceFolder}/.venv/bin/python",
       "args": ["--url-file", "urls.json", "--download-dir", "ytdlp-output", "--library-dir", "library","--source-dir","source-dir"],
       "env": {
+        "MATCHER_THREADS": "12",
       }
     }
   ]

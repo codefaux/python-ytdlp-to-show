@@ -9,18 +9,20 @@ import time
 from pathlib import Path
 
 import dateutil
+from unidecode import unidecode
 import fauxlogger as _log
 import requests
 import yt_dlp
 import yt_dlp.options
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
+from typing import Final
 
 DATA_DIR = os.getenv("DATA_DIR") or "./data"
 ytdlpconf_file = os.path.join(DATA_DIR, "yt-dlp.conf")
 using_ytdlpconf = os.path.exists(ytdlpconf_file)
 VERBOSITY = os.getenv("YTS_VERBOSITY") or 3
-ytdlp_options = {}
+ytdlp_options: Final[dict] = {}
 
 # ----------------------------
 # Utility helpers
@@ -58,7 +60,7 @@ def download_file(
         filename = Path(url).name
 
     if override_filename:
-        ext = Path(filename).suffix
+        ext = Path(filename).suffix.split('?')[0]
         filename = f"{override_filename}{ext}"
 
     out_file = dest_dir / filename
@@ -118,7 +120,7 @@ def cli_to_api(opts: list, cli_defaults: bool = False) -> dict:
 
 
 def sanitize(name: str) -> str:
-    _str = re.sub(r'[\\/:*?"<>|]', "", name)
+    _str = re.sub(r'[\[\]\\/:*?"<>|]', "", name)
     _str = re.sub(r"\s+", " ", _str).strip()
     _str = re.sub(r"\W+$", "", _str)
     return _str
@@ -204,6 +206,8 @@ def setup_ytdlp(
 ):
     skip_downloads = source_dir is not None
 
+    ytdlp_options.clear()
+
     if using_ytdlpconf:
         ytdlp_options.update(cli_to_api(["--config-locations", f"{DATA_DIR}"]))
 
@@ -223,7 +227,6 @@ def setup_ytdlp(
             "writeplaylistmetafiles": True,
             "outtmpl": str(output_root / "%(channel_id)s" / "%(id)s" / "video.%(ext)s"),
             "quiet": False,
-            "download_archive": str(output_root / "download_archive.lst"),
             "sleep_interval": 1 if skip_downloads else 90,
             "max_sleep_interval": 1 if skip_downloads else 180,
             "sleep_interval_requests": 1 if skip_downloads else 2,
@@ -233,12 +236,18 @@ def setup_ytdlp(
             # "playlist_items": "1-3",
         }
     )
+    if skip_download:
+        ytdlp_options.pop("download_archive", None)
+    else:
+        ytdlp_options.update({"download_archive": str(output_root / "download_archive.lst")})
 
 
-def download_channel(
+def download_playlist(
     url: str, output_root: Path, source_dir: Path | None = None
-) -> tuple[Path, str | None]:
+) -> tuple[Path, Path | None, list[dict]]:
     from cfsonarrmatcher import match_to_show
+
+    # --- TODO: ONLY SUPPORTS PLAYLIST VIDEOS FROM SAME CHANNEL, MUST DL EACH INFO IN SEQUENCE, FILL playlist_data
 
     setup_ytdlp(output_root, source_dir, skip_download=True, extract_flat=True)
 
@@ -247,25 +256,49 @@ def download_channel(
     with YoutubeDL(ytdlp_options) as ydl:  # pyright: ignore[reportArgumentType]
         info = ydl.extract_info(url, download=True)
 
-    channel_dir = output_root / Path(info.get("channel_id") or "")
+    channel_name: str = info.get("channel") or ""
+    channel_id: str = info.get("channel_id") or ""
+    playlist_name: str = info.get("title") or channel_name
+    playlist_dir: Path = output_root / Path(channel_id) / Path(info.get("id") or "")
+
+    playlist_data = [dict({'index': -1, 'title': playlist_name, 'url': url, 'channel_id': channel_id, 'id': info.get("id") or "", "channel_name": channel_name})]
+
+    # --- TODO: ONLY SUPPORTS PLAYLIST VIDEOS FROM SAME CHANNEL, MUST DL EACH INFO IN SEQUENCE, FILL playlist_data
+    for idx, video in enumerate(info.get('entries') or [], start=1):
+        playlist_data.append({
+            'index': idx,
+            'title': video.get('title'),
+            'url': video.get('url'),
+            'id': video.get('id')
+        })
 
     if source_dir:
-        channel_name = info.get("channel") or ""
-
         candidate_names = list(
             (_dir.name, i)
             for i, _dir in enumerate(source_dir.iterdir())
             if _dir.is_dir()
         )
 
-        result = match_to_show(channel_name, candidate_names)
+        channel_result = match_to_show(channel_name, candidate_names)
+        playlist_result = match_to_show(playlist_name, candidate_names)
+
+        results = [channel_result, playlist_result]
+
+        best_result = max(results, key=lambda _result: _result.get("score", 0))
 
         channel_srcname = (
-            candidate_names[result.get("matched_id") or 0][0]
-            if result.get("score", 0) > 70
+            candidate_names[best_result.get("matched_id") or 0][0]
+            if best_result.get("score", 0) > 70
             else None
         )
-    # else:
+
+        playlist_srcdir = source_dir / Path(channel_srcname) if channel_srcname else None
+
+        if playlist_srcdir and (playlist_srcdir / Path("Videos")).is_dir(follow_symlinks=True):
+            playlist_srcdir = playlist_srcdir / Path("Videos")
+    else:
+        playlist_srcdir = None
+
     setup_ytdlp(output_root, source_dir, skip_download=True, extract_flat=False)
 
     download_archive = load_archive(output_root)
@@ -301,16 +334,22 @@ def download_channel(
         )
         with YoutubeDL(ytdlp_options) as ydl:  # pyright: ignore[reportArgumentType]
             ydl.download(_url)
+        # --- TODO: ONLY SUPPORTS PLAYLIST VIDEOS FROM SAME CHANNEL, MUST DL EACH INFO IN SEQUENCE, FILL playlist_data
+
+        # for _entry in playlist_data:
+        #     if _entry.get("id") == single_info.get("id"):
+        #         _entry["epoch"] = single_info.get("epoch") or 0
+        #         break
+
+    (playlist_dir / Path("playlist.json")).write_text(json.dumps(playlist_data, indent=2), encoding="utf-8")
 
     _log.msg("Download finished.")
 
-    channel_srcname = None
-
-    return channel_dir, channel_srcname
+    return playlist_dir, playlist_srcdir, playlist_data
 
 
 def download_episode(output_root: Path, episode_info: dict) -> Path | None:
-    _url = episode_info.get("webpage_url")
+    _url = episode_info.get("webpage_url") or episode_info.get("url")
     if _url:
         setup_ytdlp(output_root, None, skip_download=False, extract_flat=False)
         _attempt = 0
@@ -434,16 +473,21 @@ def download_show_images(image_data: dict, show_dir: Path):
         download_file(_entry.get("url", ""), show_dir, _id.replace("_uncropped", ""))
 
 
-def create_tvshow_nfo(channel_dir: Path, library_root: Path) -> tuple[Path, str]:
-    info_dir = channel_dir / channel_dir.name
-    info_file = info_dir / "video.info.json"
+def create_tvshow_nfo(playlist_dir: Path, library_root: Path) -> Path:
+    info_file = playlist_dir / "video.info.json"
     first_info = json.load(open(info_file, encoding="utf-8"))
-
-    show_name = sanitize(first_info.get("channel"))
+    if playlist_dir.name == playlist_dir.parent.name:
+        # --- FULL CHANNEL
+        playlist_name = first_info.get("channel") or ""
+        safe_playlist_name = sanitize(playlist_name)
+    else:
+        # --- PLAYLIST
+        playlist_name = f"{first_info.get("channel")}: {first_info.get("title")}"
+        safe_playlist_name = sanitize(f"{first_info.get("channel")} - {first_info.get("title")}")
     description = first_info.get("description", "")
     u_id = first_info.get("id")
     u_id_type = first_info.get("webpage_url_domain")
-    show_dir = library_root / show_name
+    show_dir = library_root / safe_playlist_name
     show_dir.mkdir(parents=True, exist_ok=True)
 
     tvshow_nfo = show_dir / "tvshow.nfo"
@@ -451,7 +495,7 @@ def create_tvshow_nfo(channel_dir: Path, library_root: Path) -> tuple[Path, str]
         tvshow_nfo.write_text(
             f"""<?xml version="1.0" encoding="UTF-8"?>
 <tvshow>
-  <title>{show_name}</title>
+  <title>{playlist_name}</title>
   <plot>{description}</plot>
   <uniqueid type="{u_id_type}" default="">{u_id}</uniqueid>
   <studio>{u_id_type}</studio>
@@ -463,16 +507,16 @@ def create_tvshow_nfo(channel_dir: Path, library_root: Path) -> tuple[Path, str]
         image_data = first_info.get("thumbnails", [])
         download_show_images(image_data, show_dir)
 
-        for _img in info_dir.iterdir():
+        for _img in playlist_dir.iterdir():
             if _img.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
-                _dest = (show_dir / show_name).with_suffix(_img.suffix)
+                _dest = (show_dir / safe_playlist_name).with_suffix(_img.suffix)
                 _log.msg(f"Copying image {_img}")
                 try:
                     os.link(_img, _dest)
                 except OSError:
                     shutil.copy2(_img, _dest)
 
-    return show_dir, show_name
+    return show_dir
 
 
 # ----------------------------
@@ -490,6 +534,7 @@ def sort_videos_by_year(
         _dir
         for _dir in channel_dir.iterdir()
         if _dir.is_dir() and _dir.name != channel_dir.name
+        if not (_dir / Path("playlist.json")).exists()
     ):
         _info = json.load(open(_ep_path / "video.info.json", encoding="utf-8"))
 
@@ -590,26 +635,26 @@ def add_to_archive(_extractor: str, _id: str, ytdlp_data_path: Path) -> None:
 
 
 def write_ep_nfo(
-    season_dir,
+    ep_dir,
     base_name,
     title,
     orig_title,
-    year,
+    season_num,
     episode_num,
-    aired,
+    airdate,
     description,
     u_id_type,
     u_id,
 ):
-    nfo_path = season_dir / f"{base_name}.nfo"
+    nfo_path = ep_dir / f"{base_name}.nfo"
     nfo_path.write_text(
         f"""<?xml version="1.0" encoding="UTF-8"?>
 <episodedetails>
   <title>{title}</title>
   <originaltitle>{orig_title}</originaltitle>
-  <season>{year}</season>
+  <season>{season_num}</season>
   <episode>{episode_num}</episode>
-  <aired>{aired}</aired>
+  <aired>{airdate}</aired>
   <plot>{description}</plot>
   <uniqueid type="{u_id_type}" default="">{u_id}</uniqueid>
   <studio>{u_id_type}</studio>
@@ -619,120 +664,183 @@ def write_ep_nfo(
     )
 
 
-def create_episode_nfos(
-    channel_dir: Path, show_dir: Path, source_dir: Path | None = None
+def backfill_file(_entry: dict, source_dir: Path | None, _target_file: Path, _ytdlp_ep_path: Path) -> Path:
+    _match = find_match(_entry, source_dir) if source_dir else None
+
+    _ytdlp_file = _ytdlp_ep_path / Path("video.mkv")
+
+    if not _ytdlp_file.exists():
+        _lfile = None
+        if source_dir and _match:
+            _lfile = source_dir / Path(_match)
+        elif _target_file.exists():
+            _lfile = _target_file
+
+        if _lfile:
+            try:
+                os.link(_lfile, _ytdlp_file)
+                _log.msg(f"Copied library video to ytdlp-output\n\tSRC: {_lfile}\n\tDEST: {_ytdlp_file}")
+            except OSError:
+                shutil.move(_lfile, _ytdlp_file)
+                _log.msg(f"Moved library video to ytdlp-output\n\tSRC: {_lfile}\n\tDEST: {_ytdlp_file}")
+
+    return _ytdlp_file
+
+
+def process_season_videos(videos: list, season_num: int, library_season_dir: Path, source_dir: Path | None, ytdlp_dir: Path):
+    total_videos = len(videos)
+    playlist_title = None
+    safe_playlist_title = None
+
+    for _entry in videos:
+        if isinstance(_entry, dict):
+            if _entry.get("index") == -1:
+                playlist_title = f"{_entry.get("channel_name")}: {_entry.get("title")}"
+                safe_playlist_title = unidecode(sanitize(_entry.get("title") or _entry.get("channel_name") or ""))
+                # channel_id = videos[0].get("channel_id")
+                break
+
+    if playlist_title is None:
+        playlist_title = videos[0][2].get("channel")
+    if safe_playlist_title is None:
+        safe_playlist_title = videos[0][2].get("channel")
+
+    for ep_idx, (_ep_date, _ytdlp_ep_path, _entry) in enumerate((_vid for _vid in videos if not isinstance(_vid, dict)), start=1):
+        episode_num = _entry.get("index") or ep_idx
+        u_id_type = _entry.get("webpage_url_domain")
+        u_id = _entry.get("id")
+        orig_title = _entry.get("title")
+
+        title = get_new_title(u_id) or orig_title
+        safe_title = unidecode(sanitize(title))
+
+        episode_filename = (
+            f"{safe_playlist_title} - S{season_num:02d}E{episode_num:02d} - {safe_title}"
+        )
+
+        _target_file = Path(library_season_dir / f"{episode_filename}.mkv")
+
+        _log.msg(
+            f"Processing episode {_log._GREEN}{episode_num}{_log._RESET} of {_log._BLUE}{total_videos}{_log._RESET}: {_log._YELLOW}{orig_title}{_log._RESET} "
+        )
+
+        _ytdlp_file = backfill_file(_entry, source_dir, _target_file, _ytdlp_ep_path)
+
+        if not _ytdlp_file.exists():
+            _ytdlp_file = download_episode(
+                ytdlp_dir, _entry
+            )
+
+        if _target_file.exists():
+            if _target_file.with_suffix(".nfo").exists():
+                _log.msg("Found target file with nfo in library, skip processing.")
+                continue
+
+        if not _ytdlp_file or not _ytdlp_file.exists():
+            _log.msg("ytdlp file missing")
+            continue
+
+        description = _entry.get("description", "")
+        airdate = _ep_date.date().isoformat()
+
+        # Episode NFO
+        write_ep_nfo(
+            library_season_dir,
+            episode_filename,
+            title,
+            orig_title,
+            season_num,
+            episode_num,
+            airdate,
+            description,
+            u_id_type,
+            u_id,
+        )
+
+        # Episode thumbnail
+        thumbnail_url = _entry.get("thumbnail", "")
+        if thumbnail_url:
+            _ret = download_file(
+                thumbnail_url, library_season_dir, f"{episode_filename}-thumb"
+            )
+            if _ret:
+                _log.msg(f"Downloaded thumbnail to library:\n\tDEST: {_ret}")
+
+        for _img in itertools.chain(_ytdlp_ep_path.iterdir(), _ytdlp_file.parent.iterdir()):
+            if _img.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
+                _dest = (library_season_dir / episode_filename).with_suffix(_img.suffix)
+                if not _dest.exists():
+                    try:
+                        os.link(_img, _dest)
+                        _log.msg(
+                            f"Hardlinked image to library;\n\tSRC: {_img}\n\tDEST: {_dest}"
+                        )
+                    except OSError:
+                        shutil.copy2(_img, _dest)
+                        _log.msg(
+                            f"Copied image to library;\n\tSRC: {_img}\n\tDEST: {_dest}"
+                        )
+                else:
+                    _log.msg(f"Image exists {_dest}")
+
+        if not _target_file.exists():
+            try:
+                os.link(
+                    _ytdlp_file,
+                    _target_file,
+                )
+                _log.msg(
+                    f"Hardlinked video to library;\n\tSRC: {_ytdlp_file}\n\tDEST: {_target_file}"
+                )
+            except OSError:
+                shutil.copy2(
+                    _ytdlp_file,
+                    _target_file,
+                )
+                _log.msg(
+                    f"Copied video to library;\n\tSRC: {_ytdlp_file}\n\tDEST: {_target_file}"
+                )
+        else:
+            _log.msg(f"Target video file exists {_target_file}")
+
+        add_to_archive(_entry.get("extractor") or "", u_id, ytdlp_dir)
+
+
+def create_year_episode_nfos(
+    channel_dir: Path, library_show_dir: Path, source_dir: Path | None = None
 ):
-    videos_by_year, total_videos = sort_videos_by_year(channel_dir)
-    ep_idx = 0
+    videos_by_year, _ = sort_videos_by_year(channel_dir)
 
     for year, videos in videos_by_year.items():
-        season_dir = show_dir / f"Season {year}"
-        season_dir.mkdir(parents=True, exist_ok=True)
+        season_num = year
+        library_season_dir = library_show_dir / f"Season {season_num}"
+        library_season_dir.mkdir(parents=True, exist_ok=True)
+
+        # videos: list[tuple[datetime, Path, dict]]
 
         videos.sort(key=lambda x: x[0])
 
-        for episode_num, (date, _ep_path, _info) in enumerate(videos, start=1):
-            ep_idx += 1
-            u_id = _info.get("id")
-            u_id_type = _info.get("webpage_url_domain")
-            orig_title = _info.get("title")
-            title = get_new_title(u_id) or orig_title
-            safe_title = sanitize(title)
+        process_season_videos(videos, season_num, library_season_dir, source_dir, channel_dir.parent)
 
-            episode_filename = (
-                f"{show_dir.name} - S{year}E{episode_num:02d} - {safe_title}"
-            )
 
-            _target_file = Path(season_dir / f"{episode_filename}.mkv")
+def create_playlist_episode_nfos(
+    ytdlp_dir: Path, library_show_dir: Path, source_dir: Path | None, ytdlp_playlist_dir: Path
+):
+    playlist_data = json.loads((ytdlp_playlist_dir / Path("playlist.json")).read_text(encoding="utf-8"))
 
-            _log.msg(
-                f"Processing episode {_log._GREEN}{ep_idx}{_log._RESET} of {_log._BLUE}{total_videos}{_log._RESET}: {_log._YELLOW}{orig_title}{_log._RESET} "
-            )
+    videos: list = [playlist_data[0]]
+    for _entry in playlist_data:
+        if _entry.get("index") != -1:
+            _entry_path = ytdlp_dir / Path(playlist_data[0]["channel_id"]) / Path(_entry.get("id"))
+            _entry_data = json.loads((_entry_path / Path("video.info.json")).read_text(encoding="utf-8"))
+            _entry_data["index"] = _entry["index"]
+            videos.append((dateutil.parser.parse(_entry_data.get("upload_date")), _entry_path, _entry_data))
 
-            _match = find_match(_info, source_dir) if source_dir else None
+    season_num = 1
 
-            if _target_file.exists():
-                if _target_file.with_suffix(".nfo").exists():
-                    _log.msg("Found target file with nfo in library, skip processing.")
-                    continue
-                else:
-                    _log.msg("Found target file in library, skip search/download.")
-            else:
-                if source_dir and _match:
-                    _info["local_filename"] = source_dir / Path(_match)
-                else:
-                    if (_ep_path / "video.mkv").exists():
-                        # _log.msg("already downloaded")
-                        _info["local_filename"] = _ep_path / "video.mkv"
-                    else:
-                        _info["local_filename"] = download_episode(
-                            channel_dir.parent, _info
-                        )
+    process_season_videos(videos, season_num, library_show_dir, source_dir, ytdlp_dir)
 
-                if not _info.get("local_filename"):
-                    _log.msg("local_filename does not exist")
-                    continue
-
-            description = _info.get("description", "")
-            aired = date.date().isoformat()
-
-            # Episode NFO
-            write_ep_nfo(
-                season_dir,
-                episode_filename,
-                title,
-                orig_title,
-                year,
-                episode_num,
-                aired,
-                description,
-                u_id_type,
-                u_id,
-            )
-
-            # Episode thumbnail
-            thumbnail_url = _info.get("thumbnail", "")
-            if thumbnail_url:
-                _ret = download_file(
-                    thumbnail_url, season_dir, f"{episode_filename}-thumb"
-                )
-                if _ret:
-                    _log.msg(f"Downloaded thumbnail to library:\n\tDEST: {_ret}")
-
-            _ep_file = Path(_info["local_filename"])
-
-            for _img in itertools.chain(_ep_path.iterdir(), _ep_file.parent.iterdir()):
-                if _img.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
-                    _dest = (season_dir / episode_filename).with_suffix(_img.suffix)
-                    if not _dest.exists():
-                        _log.msg(
-                            f"Copying image to library;\n\tSRC: {_img}\n\tDEST: {_dest}"
-                        )
-                        try:
-                            os.link(_img, _dest)
-                        except OSError:
-                            shutil.copy2(_img, _dest)
-                    else:
-                        _log.msg(f"Image exists {_dest}")
-
-            if not _target_file.exists():
-                _log.msg(
-                    f"Copying video to library;\n\tSRC: {_info["local_filename"]}\n\tDEST: {_target_file}"
-                )
-                try:
-                    os.link(
-                        _info["local_filename"],
-                        _target_file,
-                    )
-                except OSError:
-                    shutil.copy2(
-                        _info["local_filename"],
-                        _target_file,
-                    )
-            else:
-                _log.msg(f"Target video file exists {_target_file}")
-
-            add_to_archive(_info.get("extractor") or "", u_id, channel_dir.parent)
+    return
 
 
 # ----------------------------
@@ -757,7 +865,7 @@ def main():
     urls = load_json(args.url_file)
     source_dir = Path(args.source_dir) if args.source_dir else None
 
-    download_dir = Path(args.download_dir)
+    ytdlp_dir = Path(args.download_dir)
     library_dir = Path(args.library_dir)
 
     if urls is None:
@@ -766,25 +874,40 @@ def main():
 
     for _source in urls:
         _log.msg(f"Processing next URL: {_source}")
-        channel_dir, channel_source = download_channel(
-            _source, download_dir, source_dir
+        playlist_dir, playlist_srcdir, playlist_data = download_playlist(
+            _source, ytdlp_dir, source_dir
         )
+        if playlist_data[0]["channel_id"] == playlist_data[0]["id"]:
+            # --- FULL CHANNEL
+            channel_dir = playlist_dir.parent
+            _log.msg(f"Channel stored at {channel_dir}")
+            library_show_dir = create_tvshow_nfo(channel_dir / channel_dir.name, library_dir)
+            _log.msg(f"Show data for {playlist_data[0]["channel_id"]} stored to library at {library_show_dir}")
+            create_year_episode_nfos(
+                channel_dir,
+                library_show_dir,
+                playlist_srcdir
+            )
+            _log.msg(f"Episodes and data stored to library in {library_show_dir}")
 
-        _log.msg(f"Channel stored at {channel_dir}")
-        show_dir, show_name = create_tvshow_nfo(channel_dir, library_dir)
-        _log.msg(f"Show data for {show_name} stored to library at {show_dir}")
-        create_episode_nfos(
-            channel_dir,
-            show_dir,
-            (
-                (source_dir / Path(channel_source))
-                if (source_dir and channel_source)
-                else None
-            ),
-        )
-        _log.msg(f"Episodes and data stored to library in {show_dir}")
+            _log.msg(f"Done with {channel_dir}.")
+        else:
+            # --- PLAYLIST
+            playlist_name = playlist_data[0].get("title") or ""
 
-        _log.msg(f"Done with {channel_dir}.")
+            _log.msg(f"Playlist '{playlist_name}' stored at {playlist_dir}")
+
+            library_show_dir = create_tvshow_nfo(playlist_dir, library_dir)
+            _log.msg(f"Show data for {playlist_name} stored to library at {library_show_dir}")
+
+            create_playlist_episode_nfos(
+                ytdlp_dir,
+                library_show_dir,
+                playlist_srcdir, playlist_dir
+            )
+            _log.msg(f"Episodes and data stored to library in {library_show_dir}")
+
+            _log.msg(f"Done with {playlist_dir}.")
 
 
 if __name__ == "__main__":

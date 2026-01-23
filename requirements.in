@@ -1,3 +1,6 @@
 yt-dlp[default,curl-cffi]
 fauxjson @ git+https://github.com/codefaux/python-fauxjson@main
 fauxlogger @ git+https://github.com/codefaux/python-fauxlogger@main
+cfsonarrmatcher @ git+https://github.com/codefaux/python-cfsonarr-matcher
+python-dateutil
+unidecode

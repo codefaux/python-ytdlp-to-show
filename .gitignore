@@ -3,3 +3,6 @@ data/**
 library/**
 source-dir/**
 .vscode/**
+source-dir
+ytdlp-output
+library
