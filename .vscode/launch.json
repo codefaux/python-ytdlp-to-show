@@ -14,7 +14,7 @@
         "enable": true
       },
       "python": "${workspaceFolder}/.venv/bin/python",
-      "args": ["--url-file", "urls.json", "--download-dir", "ytdlp-output", "--library-dir", "library"],
+      "args": ["--url-file", "urls.json", "--download-dir", "ytdlp-output", "--channel-library-dir", "library-channels", "--playlist-library-dir", "library-playlists"],
       "env": {
         "MATCHER_THREADS": "12",
       }
@@ -29,7 +29,7 @@
         "enable": true
       },
       "python": "${workspaceFolder}/.venv/bin/python",
-      "args": ["--url-file", "urls.json", "--download-dir", "ytdlp-output", "--library-dir", "library","--source-dir","source-dir"],
+      "args": ["--url-file", "urls.json", "--download-dir", "ytdlp-output", "--channel-library-dir", "library-channels", "--playlist-library-dir", "library-playlists"],
       "env": {
         "MATCHER_THREADS": "12",
       }
