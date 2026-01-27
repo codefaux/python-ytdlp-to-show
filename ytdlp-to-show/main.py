@@ -1014,7 +1014,7 @@ def main():
     urls = load_json(args.url_file)
     source_dir = Path(args.source_dir) if args.source_dir else None
 
-    ytdlp_dir = Path(args.download_dir)
+    ytdlp_root = Path(args.download_dir)
     playlist_library_dir = Path(args.playlist_library_dir)
     channel_library_dir = Path(args.channel_library_dir)
 
@@ -1022,13 +1022,16 @@ def main():
         print("Error: Unable to populate sources.")
         return
 
-    for _source in urls:
-        _log.msg(f"Processing next URL: {_source}")
+    for _source_url in urls:
+        _log.msg(f"Processing next URL: {_source_url}")
+
         playlist_dir, playlist_srcdir, playlist_data = download_playlist(
-            _source, ytdlp_dir, source_dir
+            _source_url, ytdlp_root, source_dir
         )
+
         if playlist_data[0]["channel_id"] == playlist_data[0]["id"]:
             # --- FULL CHANNEL
+
             channel_dir = playlist_dir.parent
             _log.msg(f"Channel stored at {channel_dir}")
             library_show_dir = create_tvshow_nfo(
@@ -1043,6 +1046,7 @@ def main():
             _log.msg(f"Done with {channel_dir}.")
         else:
             # --- PLAYLIST
+
             playlist_name = playlist_data[0].get("title") or ""
 
             _log.msg(f"Playlist '{playlist_name}' stored at {playlist_dir}")
@@ -1053,7 +1057,7 @@ def main():
             )
 
             create_playlist_episode_nfos(
-                ytdlp_dir, library_show_dir, playlist_srcdir, playlist_dir
+                ytdlp_root, library_show_dir, playlist_srcdir, playlist_dir
             )
             _log.msg(f"Episodes and data stored to library in {library_show_dir}")
 
