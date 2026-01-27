@@ -274,7 +274,7 @@ def download_playlist(
 
     # --- TODO: ONLY SUPPORTS PLAYLIST VIDEOS FROM SAME CHANNEL, MUST DL EACH INFO IN SEQUENCE, FILL playlist_data
 
-    _log.msg(f"Downloading video info from {url} to {output_root} ")
+    _log.msg(f"Downloading playlist info from {url} to {output_root} ")
 
     setup_ytdlp(output_root, skip_download=True, extract_flat=True)
     playlist_info = ydl_safe_extract_info(output_root, url, download=True)
@@ -379,14 +379,14 @@ def download_playlist(
         _url = _url_tuple[0]
         _id = _url_tuple[1]
         _log.msg(
-            f"Downloading info for video {_log._GREEN}{_i}{_log._RESET} of {_log._BLUE}{_tot}{_log._RESET}: {_log._YELLOW}{_url}{_log._RESET} "
+            f"Downloading info for item {_log._GREEN}{_i}{_log._RESET} of {_log._BLUE}{_tot}{_log._RESET}: {_log._YELLOW}{_url}{_log._RESET} "
         )
         setup_ytdlp(output_root, skip_download=True, extract_flat=False)
         single_info = ydl_safe_extract_info(
             output_root,
             _url,
             download=True,
-        )  # --- TODO: Keep download=True?
+        )
 
         if single_info:
             if not isinstance(single_info, int) and chain_filters(
@@ -940,7 +940,7 @@ def create_year_episode_nfos(
         library_season_dir.mkdir(parents=True, exist_ok=True)
 
         _log.msg(
-            f"Processing {_log._YELLOW}Season {season_num}{_log._RESET} - {_log._GREEN}{season_idx}{_log._RESET} of {_log._BLUE}{total_seasons}{_log._RESET}: {_log._YELLOW}{videos[0][2].get("channel_name")}{_log._RESET}"
+            f"Processing {_log._BLUE}{videos[0][2].get("channel")}{_log._RESET} {_log._YELLOW}Season {season_num}{_log._RESET} - {_log._GREEN}{season_idx}{_log._RESET} of {_log._BLUE}{total_seasons}{_log._RESET}"
         )
 
         videos.sort(key=lambda x: x[0])
