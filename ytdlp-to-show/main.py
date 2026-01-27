@@ -341,33 +341,7 @@ def write_playlist_json(playlist_dir: Path, url: str, playlist_info) -> list[dic
     return playlist_data
 
 
-def download_playlist(
-    url: str, output_root: Path, source_dir: Path | None = None
-) -> tuple[Path, Path | None, list[dict]]:
-
-    # --- TODO: ONLY SUPPORTS PLAYLIST VIDEOS FROM SAME CHANNEL, MUST DL EACH INFO IN SEQUENCE, FILL playlist_data
-
-    _log.msg(f"Downloading playlist info from {url} to {output_root} ")
-
-    setup_ytdlp(output_root, skip_download=True, extract_flat=True)
-    playlist_info = ydl_safe_extract_info(output_root, url, download=True)
-
-    # --- TODO: Store playlist, check if changed before doing more
-
-    if not playlist_info or isinstance(playlist_info, int):
-        raise RuntimeError(f"ydl_safe_extract_info exception {playlist_info}")
-
-    channel_id: str = playlist_info.get("channel_id") or ""
-    playlist_dir: Path = (
-        output_root / Path(channel_id) / Path(playlist_info.get("id") or "")
-    )
-
-    playlist_data = write_playlist_json(playlist_dir, url, playlist_info)
-
-    channel_name: str = playlist_info.get("channel") or ""
-    playlist_name: str = playlist_info.get("title") or channel_name
-    playlist_srcdir = find_playlist_srcdir(source_dir, channel_name, playlist_name)
-
+def prune_download_urls(output_root: Path, playlist_info) -> list[tuple[str, str]]:
     download_archive = load_archive(output_root)
 
     urls_to_download: list[tuple[str, str]] = []
@@ -395,6 +369,38 @@ def download_playlist(
                 continue
 
         urls_to_download.append((_entry.get("url") or "", _entry.get("id") or ""))
+    return urls_to_download
+
+
+def download_playlist(
+    url: str, output_root: Path, source_dir: Path | None = None
+) -> tuple[Path, Path | None, list[dict]]:
+
+    # --- TODO: ONLY SUPPORTS PLAYLIST VIDEOS FROM SAME CHANNEL, MUST DL EACH INFO IN SEQUENCE, FILL playlist_data
+
+    _log.msg(f"Downloading playlist info from {url} to {output_root} ")
+
+    setup_ytdlp(output_root, skip_download=True, extract_flat=True)
+    playlist_info = ydl_safe_extract_info(output_root, url, download=True)
+
+    # --- TODO: Store playlist, check if changed before doing more
+
+    if not playlist_info or isinstance(playlist_info, int):
+        raise RuntimeError(f"ydl_safe_extract_info exception {playlist_info}")
+
+    playlist_dir: Path = (
+        output_root
+        / Path(playlist_info.get("channel_id") or "")
+        / Path(playlist_info.get("id") or "")
+    )
+
+    playlist_data = write_playlist_json(playlist_dir, url, playlist_info)
+
+    channel_name: str = playlist_info.get("channel") or ""
+    playlist_name: str = playlist_info.get("title") or channel_name
+    playlist_srcdir = find_playlist_srcdir(source_dir, channel_name, playlist_name)
+
+    urls_to_download = prune_download_urls(output_root, playlist_info)
 
     _tot = len(urls_to_download)
     for _i, _url_tuple in enumerate(urls_to_download, start=1):
