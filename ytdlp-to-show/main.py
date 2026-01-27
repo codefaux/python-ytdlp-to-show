@@ -372,6 +372,34 @@ def prune_download_urls(output_root: Path, playlist_info) -> list[tuple[str, str
     return urls_to_download
 
 
+def download_item_info(output_root, _url_tuple):
+    _url = _url_tuple[0]
+    _id = _url_tuple[1]
+    setup_ytdlp(
+        output_root, skip_download=True, extract_flat=True
+    )  # Switched extract_flat to True to prevent playlist of playlists downloading each video info
+    single_info = ydl_safe_extract_info(
+        output_root,
+        _url,
+        download=True,
+    )
+
+    if single_info:
+        if not isinstance(single_info, int) and chain_filters(
+            duration_filter, live_filter
+        )(single_info, incomplete=False):
+            _extractor = single_info.get("extractor") or ""
+            _log.msg(f"Adding {_extractor} {_id} to download_archive")
+            add_to_archive(_extractor, _id, output_root)
+
+    # --- TODO: ONLY SUPPORTS PLAYLIST VIDEOS FROM SAME CHANNEL, MUST DL EACH INFO IN SEQUENCE, FILL playlist_data
+
+    # for _entry in playlist_data:
+    #     if _entry.get("id") == single_info.get("id"):
+    #         _entry["epoch"] = single_info.get("epoch") or 0
+    #         break
+
+
 def download_playlist(
     url: str, output_root: Path, source_dir: Path | None = None
 ) -> tuple[Path, Path | None, list[dict]]:
@@ -404,34 +432,10 @@ def download_playlist(
 
     _tot = len(urls_to_download)
     for _i, _url_tuple in enumerate(urls_to_download, start=1):
-        _url = _url_tuple[0]
-        _id = _url_tuple[1]
         _log.msg(
-            f"Downloading info for item {_log._GREEN}{_i}{_log._RESET} of {_log._BLUE}{_tot}{_log._RESET}: {_log._YELLOW}{_url}{_log._RESET} "
+            f"Downloading info for item {_log._GREEN}{_i}{_log._RESET} of {_log._BLUE}{_tot}{_log._RESET}: {_log._YELLOW}{_url_tuple[0]}{_log._RESET} "
         )
-        setup_ytdlp(
-            output_root, skip_download=True, extract_flat=True
-        )  # Switched extract_flat to True to prevent playlist of playlists downloading each video info
-        single_info = ydl_safe_extract_info(
-            output_root,
-            _url,
-            download=True,
-        )
-
-        if single_info:
-            if not isinstance(single_info, int) and chain_filters(
-                duration_filter, live_filter
-            )(single_info, incomplete=False):
-                _extractor = single_info.get("extractor") or ""
-                _log.msg(f"Adding {_extractor} {_id} to download_archive")
-                add_to_archive(_extractor, _id, output_root)
-
-        # --- TODO: ONLY SUPPORTS PLAYLIST VIDEOS FROM SAME CHANNEL, MUST DL EACH INFO IN SEQUENCE, FILL playlist_data
-
-        # for _entry in playlist_data:
-        #     if _entry.get("id") == single_info.get("id"):
-        #         _entry["epoch"] = single_info.get("epoch") or 0
-        #         break
+        download_item_info(output_root, _url_tuple)
 
     _log.msg("Download finished.")
 
