@@ -381,7 +381,9 @@ def download_playlist(
         _log.msg(
             f"Downloading info for item {_log._GREEN}{_i}{_log._RESET} of {_log._BLUE}{_tot}{_log._RESET}: {_log._YELLOW}{_url}{_log._RESET} "
         )
-        setup_ytdlp(output_root, skip_download=True, extract_flat=False)
+        setup_ytdlp(
+            output_root, skip_download=True, extract_flat=True
+        )  # Switched extract_flat to True to prevent playlist of playlists downloading each video info
         single_info = ydl_safe_extract_info(
             output_root,
             _url,
