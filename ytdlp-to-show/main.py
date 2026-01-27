@@ -255,6 +255,7 @@ def setup_ytdlp(
             "concurrent_fragment_downloads": 1 if skip_download else 2,
             "continuedl": True,
             "nopart": False,
+            "subtitleslangs": ["en", "-live_chat"],
             # "playlist_items": "1-3",
         }
     )
