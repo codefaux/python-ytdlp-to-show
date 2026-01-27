@@ -624,10 +624,12 @@ def sort_videos_by_year(
     for _ep_path in sorted(
         _dir
         for _dir in channel_dir.iterdir()
-        if _dir.is_dir() and _dir.name != channel_dir.name
         if not (_dir / Path("playlist.json")).exists()
     ):
         _info = json.load(open(_ep_path / "video.info.json", encoding="utf-8"))
+
+        if _info.get("_type") == "playlist":
+            continue
 
         if not should_create_episode(_info):
             continue
