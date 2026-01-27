@@ -458,6 +458,17 @@ def ydl_safe_extract_info(output_root: Path, *args, **kwargs):
                 add_to_archive(_extractor, _id, output_root)
 
                 return 0
+            elif e.msg and ("not available" in e.msg or "unavailable" in e.msg):
+                _log.msg("Video unavailable, skipping")
+                _exc: ExtractorError = e.exc_info[
+                    1
+                ]  # pyright: ignore[reportAssignmentType]
+                _extractor = str(_exc.ie)
+                _id = _exc.video_id
+                _log.msg(f"Adding {_extractor} {_id} to download_archive")
+                add_to_archive(_extractor, _id, output_root)
+
+                return 0
             elif e.msg and "403" in e.msg.lower() and "forbidden" in e.msg.lower():
                 _log.msg(f"Download error: {e.msg}")
                 raise RuntimeError(e.msg)
