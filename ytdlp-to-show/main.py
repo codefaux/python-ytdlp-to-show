@@ -267,10 +267,48 @@ def setup_ytdlp(
         )
 
 
+def find_playlist_srcdir(
+    source_dir: Path | None, channel_name, playlist_name
+) -> Path | None:
+    from cfsonarrmatcher import match_to_show
+
+    playlist_srcdir = None
+
+    if source_dir:
+        candidate_names = list(
+            (_dir.name, i)
+            for i, _dir in enumerate(source_dir.iterdir())
+            if _dir.is_dir()
+        )
+
+        channel_result = match_to_show(channel_name, candidate_names)
+        playlist_result = match_to_show(playlist_name, candidate_names)
+
+        results = [channel_result, playlist_result]
+
+        best_result = max(results, key=lambda _result: _result.get("score", 0))
+
+        channel_srcname = (
+            candidate_names[best_result.get("matched_id") or 0][0]
+            if best_result.get("score", 0) > 70
+            else None
+        )
+
+        playlist_srcdir = (
+            source_dir / Path(channel_srcname) if channel_srcname else None
+        )
+
+        if playlist_srcdir and (playlist_srcdir / Path("Videos")).is_dir(
+            follow_symlinks=True
+        ):
+            playlist_srcdir = playlist_srcdir / Path("Videos")
+
+    return playlist_srcdir
+
+
 def download_playlist(
     url: str, output_root: Path, source_dir: Path | None = None
 ) -> tuple[Path, Path | None, list[dict]]:
-    from cfsonarrmatcher import match_to_show
 
     # --- TODO: ONLY SUPPORTS PLAYLIST VIDEOS FROM SAME CHANNEL, MUST DL EACH INFO IN SEQUENCE, FILL playlist_data
 
@@ -315,36 +353,7 @@ def download_playlist(
             }
         )
 
-    if source_dir:
-        candidate_names = list(
-            (_dir.name, i)
-            for i, _dir in enumerate(source_dir.iterdir())
-            if _dir.is_dir()
-        )
-
-        channel_result = match_to_show(channel_name, candidate_names)
-        playlist_result = match_to_show(playlist_name, candidate_names)
-
-        results = [channel_result, playlist_result]
-
-        best_result = max(results, key=lambda _result: _result.get("score", 0))
-
-        channel_srcname = (
-            candidate_names[best_result.get("matched_id") or 0][0]
-            if best_result.get("score", 0) > 70
-            else None
-        )
-
-        playlist_srcdir = (
-            source_dir / Path(channel_srcname) if channel_srcname else None
-        )
-
-        if playlist_srcdir and (playlist_srcdir / Path("Videos")).is_dir(
-            follow_symlinks=True
-        ):
-            playlist_srcdir = playlist_srcdir / Path("Videos")
-    else:
-        playlist_srcdir = None
+    playlist_srcdir = find_playlist_srcdir(source_dir, channel_name, playlist_name)
 
     download_archive = load_archive(output_root)
 
