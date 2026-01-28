@@ -29,7 +29,7 @@
         "enable": true
       },
       "python": "${workspaceFolder}/.venv/bin/python",
-      "args": ["--url-file", "urls.json", "--download-dir", "ytdlp-output", "--channel-library-dir", "library-channels", "--playlist-library-dir", "library-playlists"],
+      "args": ["--url-file", "urls.json", "--download-dir", "ytdlp-output", "--channel-library-dir", "library-channels", "--playlist-library-dir", "library-playlists", "--source-dir", "source-dir"],
       "env": {
         "MATCHER_THREADS": "12",
       }
