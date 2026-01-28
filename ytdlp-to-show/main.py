@@ -251,7 +251,7 @@ def setup_ytdlp(
             "quiet": False,
             "sleep_interval": 1 if skip_download else 90,
             "max_sleep_interval": 1 if skip_download else 180,
-            "sleep_interval_requests": 1 if skip_download else 2,
+            "sleep_interval_requests": 0 if skip_download else 1,
             "concurrent_fragment_downloads": 1 if skip_download else 2,
             "continuedl": True,
             "nopart": False,
