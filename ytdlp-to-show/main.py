@@ -856,6 +856,9 @@ def process_season_videos(
     for ep_idx, (_ep_date, _ytdlp_ep_path, _entry) in enumerate(
         (_vid for _vid in videos if not isinstance(_vid, dict)), start=1
     ):
+        if _entry is None:
+            continue
+
         episode_num = _entry.get("index") or ep_idx
         u_id_type = _entry.get("webpage_url_domain")
         u_id = _entry.get("id")
