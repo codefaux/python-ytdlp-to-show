@@ -1030,9 +1030,7 @@ def create_playlist_episode_nfos(
             else:
                 videos.append((None, None, None))
 
-    season_num = 1
-
-    process_season_videos(videos, season_num, library_show_dir, source_dir, ytdlp_dir)
+    process_season_videos(videos, 1, library_show_dir, source_dir, ytdlp_dir)
 
     return
 
