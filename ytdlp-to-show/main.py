@@ -1014,17 +1014,21 @@ def create_playlist_episode_nfos(
                 / Path(playlist_data[0]["channel_id"])
                 / Path(_entry.get("id"))
             )
-            _entry_data = json.loads(
-                (_entry_path / Path("video.info.json")).read_text(encoding="utf-8")
-            )
-            _entry_data["index"] = _entry["index"]
-            videos.append(
-                (
-                    dateutil.parser.parse(_entry_data.get("upload_date")),
-                    _entry_path,
-                    _entry_data,
+            _entry_json_filename = _entry_path / Path("video.info.json")
+            if _entry_json_filename.exists():
+                _entry_data = json.loads(
+                    (_entry_json_filename).read_text(encoding="utf-8")
                 )
-            )
+                _entry_data["index"] = _entry["index"]
+                videos.append(
+                    (
+                        dateutil.parser.parse(_entry_data.get("upload_date")),
+                        _entry_path,
+                        _entry_data,
+                    )
+                )
+            else:
+                videos.append((None, None, None))
 
     season_num = 1
 
