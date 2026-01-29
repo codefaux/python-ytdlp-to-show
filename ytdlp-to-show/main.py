@@ -882,7 +882,12 @@ def process_season_videos(
             f"Processing episode {_log._GREEN}{episode_num}{_log._RESET} of {_log._BLUE}{total_videos}{_log._RESET}: {_log._YELLOW}{orig_title}{_log._RESET} "
         )
 
-        _ytdlp_file = backfill_file(_entry, source_dir, _target_file, _ytdlp_ep_path)
+        _ytdlp_file = _ytdlp_ep_path / Path("video.mkv")
+
+        if not _ytdlp_file.exists():
+            _ytdlp_file = backfill_file(
+                _entry, source_dir, _target_file, _ytdlp_ep_path
+            )
 
         if not _ytdlp_file.exists():
             _ytdlp_file = download_episode(ytdlp_dir, _entry)
