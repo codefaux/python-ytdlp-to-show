@@ -10,6 +10,7 @@ from pathlib import Path
 
 import dateutil
 from unidecode import unidecode
+from cfsonarrmatcher import match_to_show
 import fauxlogger as _log
 import requests
 import yt_dlp
@@ -270,7 +271,6 @@ def setup_ytdlp(
 def find_playlist_srcdir(
     source_dir: Path | None, channel_name, playlist_name
 ) -> Path | None:
-    from cfsonarrmatcher import match_to_show
 
     playlist_srcdir = None
 
