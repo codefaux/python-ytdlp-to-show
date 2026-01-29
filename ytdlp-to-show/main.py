@@ -1054,6 +1054,19 @@ def create_playlist_episode_nfos(
 # ----------------------------
 
 
+def iter_playlist_targets(
+    playlist_data: list[dict], ytdlp_root: Path, source_dir: Path | None
+):
+    for _idx, _playlist in enumerate(playlist_data, start=0):
+        if not _playlist.get("index") == -1:
+            _log.msg(
+                f"Downloading {_log._BLUE}info{_log._RESET} for {_log._YELLOW}{playlist_data[0].get("channel_name") or ""}{_log._RESET}"
+                f" playlist {_log._GREEN}{_idx}{_log._RESET} of {_log._BLUE}{len(playlist_data) - 1}{_log._RESET}:"
+                f" {_log._YELLOW}{_playlist.get("title") or ""}{_log._RESET} "
+            )
+            yield download_playlist(_playlist.get("url") or "", ytdlp_root, source_dir)
+
+
 def main():
     # Verbosity 0
     import argparse
@@ -1083,33 +1096,24 @@ def main():
 
     for _source_url in urls:
         _log.msg(f"Processing next URL: {_source_url}")
-        playlist_targets: list[tuple[Path, Path | None, list[dict]]] = []
+        _pl_enumerator: enumerate
 
         if _source_url.lower().startswith("playlists:"):
             _source_url = _source_url.split(":", 1)[1]
 
             _, _, playlist_data = download_playlist(_source_url, ytdlp_root, source_dir)
-            for _idx, _playlist in enumerate(playlist_data, start=0):
-                if not _playlist.get("index") == -1:
-                    _log.msg(
-                        f"Downloading {_log._BLUE}info{_log._RESET} for {_log._YELLOW}{playlist_data[0].get("channel_name") or ""}{_log._RESET}"
-                        f" playlist {_log._GREEN}{_idx}{_log._RESET} of {_log._BLUE}{len(playlist_data) - 1}{_log._RESET}:"
-                        f" {_log._YELLOW}{_playlist.get("title") or ""}{_log._RESET} "
-                    )
-                    playlist_targets.append(
-                        download_playlist(
-                            _playlist.get("url") or "", ytdlp_root, source_dir
-                        )
-                    )
+            _pl_enumerator = enumerate(
+                iter_playlist_targets(playlist_data, ytdlp_root, source_dir), start=1
+            )
         else:
             playlist_dir, playlist_srcdir, playlist_data = download_playlist(
                 _source_url, ytdlp_root, source_dir
             )
-            playlist_targets.append((playlist_dir, playlist_srcdir, playlist_data))
+            _pl_enumerator = enumerate(
+                [(playlist_dir, playlist_srcdir, playlist_data)], start=1
+            )
 
-        for _idx, (_pl_dir, _pl_srcdir, _pl_data) in enumerate(
-            playlist_targets, start=1
-        ):
+        for _idx, (_pl_dir, _pl_srcdir, _pl_data) in _pl_enumerator:
             _log.msg(
                 f"Processing {_log._BLUE}episodes{_log._RESET} for {_log._YELLOW}{playlist_data[0].get("channel_name") or ""}{_log._RESET}"
                 f" playlist {_log._GREEN}{_idx}{_log._RESET} of {_log._BLUE}{len(playlist_data) - 1}{_log._RESET}:"
