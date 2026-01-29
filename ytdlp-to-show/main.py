@@ -361,7 +361,6 @@ def prune_download_urls(output_root: Path, playlist_info) -> list[tuple[str, str
             output_root
             / Path(playlist_info.get("channel_id") or "")
             / Path(_entry.get("id") or "")
-            # / "video.mkv"
             / "video.info.json"
         )
 
@@ -749,13 +748,10 @@ def build_candidates(source_dir: Path) -> list[dict]:
 def find_match(video_info: dict, source_dir: Path) -> Path | None:
     from cfsonarrmatcher import match_to_episode
 
-    # Prep data and throw to python-cfsonarr-matcher
-    # build candidate dict from source_dir
     cand_dict = build_candidates(source_dir)
 
     output = match_to_episode(video_info.get("title") or "", "", cand_dict)
 
-    # _log.msg(output)
     if (output.get("score") or 0) > 60:
         return output.get("full_match", {}).get("local_filename", None)
 
@@ -854,7 +850,6 @@ def process_season_videos(
                 safe_playlist_title = unidecode(
                     sanitize(_entry.get("title") or _entry.get("channel_name") or "")
                 )
-                # channel_id = videos[0].get("channel_id")
                 break
 
     if playlist_title is None:
