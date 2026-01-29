@@ -1088,55 +1088,67 @@ def main():
         if _source_url.lower().startswith("playlists:"):
             _source_url = _source_url.split(":", 1)[1]
 
-            playlist_dir, playlist_srcdir, playlist_data = download_playlist(
-                _source_url, ytdlp_root, source_dir
-            )
-            for _playlist in playlist_data:
+            _, _, playlist_data = download_playlist(_source_url, ytdlp_root, source_dir)
+            for _idx, _playlist in enumerate(playlist_data, start=0):
                 if not _playlist.get("index") == -1:
+                    _log.msg(
+                        f"Downloading {_log._BLUE}info{_log._RESET} for {_log._YELLOW}{playlist_data[0].get("channel_name") or ""}{_log._RESET}"
+                        f" playlist {_log._GREEN}{_idx}{_log._RESET} of {_log._BLUE}{len(playlist_data) - 1}{_log._RESET}:"
+                        f" {_log._YELLOW}{_playlist.get("title") or ""}{_log._RESET} "
+                    )
                     playlist_targets.append(
                         download_playlist(
                             _playlist.get("url") or "", ytdlp_root, source_dir
                         )
                     )
         else:
-            playlist_targets.append(
-                download_playlist(_source_url, ytdlp_root, source_dir),
+            playlist_dir, playlist_srcdir, playlist_data = download_playlist(
+                _source_url, ytdlp_root, source_dir
+            )
+            playlist_targets.append((playlist_dir, playlist_srcdir, playlist_data))
+
+        for _idx, (_pl_dir, _pl_srcdir, _pl_data) in enumerate(
+            playlist_targets, start=1
+        ):
+            _log.msg(
+                f"Processing {_log._BLUE}episodes{_log._RESET} for {_log._YELLOW}{playlist_data[0].get("channel_name") or ""}{_log._RESET}"
+                f" playlist {_log._GREEN}{_idx}{_log._RESET} of {_log._BLUE}{len(playlist_data) - 1}{_log._RESET}:"
+                f" {_log._YELLOW}{_pl_data[0].get("title") or ""}{_log._RESET} "
             )
 
-        for playlist_dir, playlist_srcdir, playlist_data in playlist_targets:
-            if playlist_data[0]["channel_id"] == playlist_data[0]["id"]:
+            if _pl_data[0]["channel_id"] == _pl_data[0]["id"]:
                 # --- FULL CHANNEL
 
-                channel_dir = playlist_dir.parent
+                channel_dir = _pl_dir.parent
                 _log.msg(f"Channel stored at {channel_dir}")
                 library_show_dir = create_tvshow_nfo(
                     channel_dir / channel_dir.name, channel_library_dir
                 )
                 _log.msg(
-                    f"Show data for {playlist_data[0]["channel_id"]} stored to library at {library_show_dir}"
+                    f"Show data for {_pl_data[0]["channel_id"]} stored to library at {library_show_dir}"
                 )
-                create_year_episode_nfos(channel_dir, library_show_dir, playlist_srcdir)
+                create_year_episode_nfos(channel_dir, library_show_dir, _pl_srcdir)
                 _log.msg(f"Episodes and data stored to library in {library_show_dir}")
 
                 _log.msg(f"Done with {channel_dir}.")
             else:
                 # --- PLAYLIST
 
-                playlist_name = playlist_data[0].get("title") or ""
+                playlist_name = _pl_data[0].get("title") or ""
 
-                _log.msg(f"Playlist '{playlist_name}' stored at {playlist_dir}")
+                _log.msg(f"Playlist '{playlist_name}' stored at {_pl_dir}")
 
-                library_show_dir = create_tvshow_nfo(playlist_dir, playlist_library_dir)
+                library_show_dir = create_tvshow_nfo(_pl_dir, playlist_library_dir)
                 _log.msg(
                     f"Show data for {playlist_name} stored to library at {library_show_dir}"
                 )
 
                 create_playlist_episode_nfos(
-                    ytdlp_root, library_show_dir, playlist_srcdir, playlist_dir
+                    ytdlp_root, library_show_dir, _pl_srcdir, _pl_dir
                 )
                 _log.msg(f"Episodes and data stored to library in {library_show_dir}")
 
-                _log.msg(f"Done with {playlist_dir}.")
+                _log.msg(f"Done with {_pl_dir}.")
 
 
 if __name__ == "__main__":
