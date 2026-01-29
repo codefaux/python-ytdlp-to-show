@@ -823,7 +823,7 @@ def backfill_file(
             try:
                 os.link(_lfile, _ytdlp_file)
                 _log.msg(
-                    f"Copied source-dir video to ytdlp-output\n\tSRC: {_lfile}\n\tDEST: {_ytdlp_file}"
+                    f"Hardlinked source-dir video to ytdlp-output\n\tSRC: {_lfile}\n\tDEST: {_ytdlp_file}"
                 )
             except OSError:
                 shutil.move(_lfile, _ytdlp_file)
