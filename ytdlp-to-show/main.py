@@ -54,6 +54,9 @@ def download_file(
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     response = requests.get(url, stream=True)
+    if response.status_code == 404:
+        return None
+
     response.raise_for_status()
 
     # Get the server-suggested filename
