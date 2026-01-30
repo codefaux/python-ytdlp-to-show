@@ -287,9 +287,10 @@ def find_playlist_srcdir(
         channel_result = match_to_show(channel_name, candidate_names)
         playlist_result = match_to_show(playlist_name, candidate_names)
 
-        results = [channel_result, playlist_result]
-
-        best_result = max(results, key=lambda _result: _result.get("score", 0))
+        best_result = max(
+            [channel_result, playlist_result],
+            key=lambda _result: _result.get("score", 0),
+        )
 
         channel_srcname = (
             next(
@@ -300,7 +301,7 @@ def find_playlist_srcdir(
                 ),
                 None,
             )
-            if best_result.get("score", 0) > 100
+            if best_result.get("score", 0) > 60
             else None
         )
 
