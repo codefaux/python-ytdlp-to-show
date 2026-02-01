@@ -240,7 +240,7 @@ def setup_ytdlp(
     ytdlp_options.update(
         {
             "socket_timeout": 23,
-            "retries": 2,
+            "retries": 1,
             "fragment_retries": 2,
             "throttled_rate": 102400,
             "progress_hooks": [anti_stall],
