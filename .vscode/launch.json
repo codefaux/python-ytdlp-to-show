@@ -5,6 +5,22 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Run with source dir",
+      "type": "debugpy",
+      "request": "launch",
+      "justMyCode": false,
+      "program": "${workspaceFolder}/ytdlp-to-show/main.py",
+      "console": "integratedTerminal",
+      "autoReload": {
+        "enable": true
+      },
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "args": ["--url-file", "urls.json", "--download-dir", "ytdlp-output", "--channel-library-dir", "library-channels", "--playlist-library-dir", "library-playlists", "--source-dir", "source-dir"],
+      "env": {
+        "MATCHER_THREADS": "32",
+      }
+    },
+    {
       "name": "Run without source dir",
       "type": "debugpy",
       "request": "launch",
@@ -16,22 +32,7 @@
       "python": "${workspaceFolder}/.venv/bin/python",
       "args": ["--url-file", "urls.json", "--download-dir", "ytdlp-output", "--channel-library-dir", "library-channels", "--playlist-library-dir", "library-playlists"],
       "env": {
-        "MATCHER_THREADS": "12",
-      }
-    },
-    {
-      "name": "Run with source dir",
-      "type": "debugpy",
-      "request": "launch",
-      "program": "${workspaceFolder}/ytdlp-to-show/main.py",
-      "console": "integratedTerminal",
-      "autoReload": {
-        "enable": true
-      },
-      "python": "${workspaceFolder}/.venv/bin/python",
-      "args": ["--url-file", "urls.json", "--download-dir", "ytdlp-output", "--channel-library-dir", "library-channels", "--playlist-library-dir", "library-playlists", "--source-dir", "source-dir"],
-      "env": {
-        "MATCHER_THREADS": "12",
+        "MATCHER_THREADS": "32",
       }
     }
   ]
