@@ -800,7 +800,7 @@ def write_ep_nfo(
     u_id_type,
     u_id,
 ):
-    nfo_path = ep_dir / f"{base_name}.nfo"
+    nfo_path = ep_dir / f"{sanitize(unidecode(base_name))}.nfo"
     nfo_path.write_text(
         f"""<?xml version="1.0" encoding="UTF-8"?>
 <episodedetails>
@@ -862,8 +862,8 @@ def process_season_videos(
         if isinstance(_entry, dict):
             if _entry.get("index") == -1:
                 playlist_title = f"{_entry.get("channel_name")}: {_entry.get("title")}"
-                safe_playlist_title = unidecode(
-                    sanitize(_entry.get("title") or _entry.get("channel_name") or "")
+                safe_playlist_title = sanitize(
+                    unidecode(_entry.get("title") or _entry.get("channel_name") or "")
                 )
                 break
 
@@ -884,7 +884,7 @@ def process_season_videos(
         orig_title = _entry.get("title")
 
         title = get_new_title(u_id) or orig_title
-        safe_title = unidecode(sanitize(title))
+        safe_title = sanitize(unidecode(title))
 
         episode_filename = f"{safe_playlist_title} - S{season_num:02d}E{episode_num:02d} - {safe_title}"
 
