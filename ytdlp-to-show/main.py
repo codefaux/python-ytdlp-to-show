@@ -19,6 +19,8 @@ from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError, ExtractorError
 from typing import Final
 
+from config import config
+
 DATA_DIR = os.getenv("DATA_DIR") or "./data"
 ytdlpconf_file = os.path.join(DATA_DIR, "yt-dlp.conf")
 cookies_file = os.path.join(DATA_DIR, "cookies.txt")
@@ -226,7 +228,6 @@ def anti_stall(info):
 
 
 def setup_ytdlp(
-    output_root: Path,
     skip_download: bool = False,
     extract_flat: bool = False,
 ):
@@ -251,7 +252,9 @@ def setup_ytdlp(
             "writeinfojson": True,
             "writethumbnail": True,
             "writeplaylistmetafiles": True,
-            "outtmpl": str(output_root / "%(channel_id)s" / "%(id)s" / "video.%(ext)s"),
+            "outtmpl": str(
+                config.ytdlp_root / "%(channel_id)s" / "%(id)s" / "video.%(ext)s"
+            ),
             "quiet": False,
             "sleep_interval": 1 if skip_download else 90,
             "max_sleep_interval": 1 if skip_download else 180,
@@ -267,20 +270,18 @@ def setup_ytdlp(
         ytdlp_options.pop("download_archive", None)
     else:
         ytdlp_options.update(
-            {"download_archive": str(output_root / "download_archive.lst")}
+            {"download_archive": str(config.ytdlp_root / "download_archive.lst")}
         )
 
 
-def find_playlist_srcdir(
-    source_dir: Path | None, channel_name, playlist_name
-) -> Path | None:
+def find_playlist_srcdir(channel_name, playlist_name) -> Path | None:
 
     playlist_srcdir = None
 
-    if source_dir:
+    if config.source_dir:
         candidate_names = list(
             (_dir.name, i)
-            for i, _dir in enumerate(source_dir.iterdir())
+            for i, _dir in enumerate(config.source_dir.iterdir())
             if _dir.is_dir()
         )
 
@@ -306,7 +307,7 @@ def find_playlist_srcdir(
         )
 
         playlist_srcdir = (
-            source_dir / Path(channel_srcname) if channel_srcname else None
+            config.source_dir / Path(channel_srcname) if channel_srcname else None
         )
 
         if playlist_srcdir and (playlist_srcdir / Path("Videos")).is_dir(
@@ -352,8 +353,8 @@ def write_playlist_json(playlist_dir: Path, url: str, playlist_info) -> list[dic
     return playlist_data
 
 
-def prune_download_urls(output_root: Path, playlist_info) -> list[tuple[str, str]]:
-    download_archive = load_archive(output_root)
+def prune_download_urls(playlist_info) -> list[tuple[str, str]]:
+    download_archive = load_archive(config.ytdlp_root)
 
     urls_to_download: list[tuple[str, str]] = []
 
@@ -362,7 +363,7 @@ def prune_download_urls(output_root: Path, playlist_info) -> list[tuple[str, str
             continue
 
         _ytdlp_output_file = Path(
-            output_root
+            config.ytdlp_root
             / Path(playlist_info.get("channel_id") or "")
             / Path(_entry.get("id") or "")
             / "video.info.json"
@@ -382,17 +383,12 @@ def prune_download_urls(output_root: Path, playlist_info) -> list[tuple[str, str
     return urls_to_download
 
 
-def download_item_info(output_root, _url_tuple):
+def download_item_info(_url_tuple):
     _url = _url_tuple[0]
     _id = _url_tuple[1]
-    setup_ytdlp(
-        output_root, skip_download=True, extract_flat=True
-    )  # Switched extract_flat to True to prevent playlist of playlists downloading each video info
-    single_info = ydl_safe_extract_info(
-        output_root,
-        _url,
-        download=True,
-    )
+    setup_ytdlp(skip_download=True, extract_flat=True)
+    # Switched extract_flat to True to prevent playlist of playlists downloading each video info
+    single_info = ydl_safe_extract_info(_url, download=True)
 
     if single_info:
         if not isinstance(single_info, int) and chain_filters(
@@ -400,7 +396,7 @@ def download_item_info(output_root, _url_tuple):
         )(single_info, incomplete=False):
             _extractor = single_info.get("extractor") or ""
             _log.msg(f"Adding {_extractor} {_id} to download_archive")
-            add_to_archive(_extractor, _id, output_root)
+            add_to_archive(_extractor, _id)
 
     # --- TODO: ONLY SUPPORTS PLAYLIST VIDEOS FROM SAME CHANNEL, MUST DL EACH INFO IN SEQUENCE, FILL playlist_data
 
@@ -410,16 +406,13 @@ def download_item_info(output_root, _url_tuple):
     #         break
 
 
-def download_playlist(
-    url: str, output_root: Path, source_dir: Path | None = None
-) -> tuple[Path, Path | None, list[dict]]:
-
+def download_playlist(url: str) -> tuple[Path, Path | None, list[dict]]:
     # --- TODO: ONLY SUPPORTS PLAYLIST VIDEOS FROM SAME CHANNEL, MUST DL EACH INFO IN SEQUENCE, FILL playlist_data
 
-    _log.msg(f"Downloading playlist info from {url} to {output_root} ")
+    _log.msg(f"Downloading playlist info from {url} to {config.ytdlp_root} ")
 
-    setup_ytdlp(output_root, skip_download=True, extract_flat=True)
-    playlist_info = ydl_safe_extract_info(output_root, url, download=True)
+    setup_ytdlp(skip_download=True, extract_flat=True)
+    playlist_info = ydl_safe_extract_info(url, download=True)
 
     # --- TODO: Store playlist, check if changed before doing more
 
@@ -427,7 +420,7 @@ def download_playlist(
         raise RuntimeError(f"ydl_safe_extract_info exception {playlist_info}")
 
     playlist_dir: Path = (
-        output_root
+        config.ytdlp_root
         / Path(playlist_info.get("channel_id") or "")
         / Path(playlist_info.get("id") or "")
     )
@@ -436,27 +429,30 @@ def download_playlist(
 
     channel_name: str = playlist_info.get("channel") or ""
     playlist_name: str = playlist_info.get("title") or channel_name
-    playlist_srcdir = find_playlist_srcdir(source_dir, channel_name, playlist_name)
+    playlist_srcdir = find_playlist_srcdir(channel_name, playlist_name)
 
-    urls_to_download = prune_download_urls(output_root, playlist_info)
+    urls_to_download = prune_download_urls(playlist_info)
 
     _tot = len(urls_to_download)
     for _i, _url_tuple in enumerate(urls_to_download, start=1):
         _log.msg(
             f"Downloading info for item {_log._GREEN}{_i}{_log._RESET} of {_log._BLUE}{_tot}{_log._RESET}: {_log._YELLOW}{_url_tuple[0]}{_log._RESET} "
         )
-        download_item_info(output_root, _url_tuple)
+        download_item_info(_url_tuple)
 
     _log.msg("Download finished.")
 
     return playlist_dir, playlist_srcdir, playlist_data
 
 
-def ydl_safe_extract_info(output_root: Path, *args, **kwargs):
+def ydl_safe_extract_info(*args, **kwargs):
     with YoutubeDL(ytdlp_options) as ydl:  # pyright: ignore[reportArgumentType]
         try:
             return ydl.extract_info(*args, **kwargs)
         except DownloadError as e:
+            if e.msg and "404" in e.msg:
+                raise RuntimeError(e.msg)
+                return 403
             if e.msg and "members-only" in e.msg:
                 _log.msg("Download skipped: Members only")
                 _exc: ExtractorError = e.exc_info[
@@ -465,7 +461,7 @@ def ydl_safe_extract_info(output_root: Path, *args, **kwargs):
                 _extractor = str(_exc.ie)
                 _id = _exc.video_id
                 _log.msg(f"Adding {_extractor} {_id} to download_archive")
-                add_to_archive(_extractor, _id, output_root)
+                add_to_archive(_extractor, _id)
 
                 return 0
             elif e.msg and ("requires payment" in e.msg):
@@ -476,7 +472,7 @@ def ydl_safe_extract_info(output_root: Path, *args, **kwargs):
                 _extractor = str(_exc.ie)
                 _id = _exc.video_id
                 _log.msg(f"Adding {_extractor} {_id} to download_archive")
-                add_to_archive(_extractor, _id, output_root)
+                add_to_archive(_extractor, _id)
 
                 return 0
             elif e.msg and (
@@ -489,7 +485,7 @@ def ydl_safe_extract_info(output_root: Path, *args, **kwargs):
                 _extractor = str(_exc.ie)
                 _id = _exc.video_id
                 _log.msg(f"Adding {_extractor} {_id} to download_archive")
-                add_to_archive(_extractor, _id, output_root)
+                add_to_archive(_extractor, _id)
 
                 return 0
             elif e.msg and "403" in e.msg.lower() and "forbidden" in e.msg.lower():
@@ -507,23 +503,23 @@ def ydl_safe_extract_info(output_root: Path, *args, **kwargs):
     return int(-1)
 
 
-def download_episode(output_root: Path, episode_info: dict) -> Path | int:
+def download_episode(episode_info: dict) -> Path | int:
     _url = episode_info.get("webpage_url") or episode_info.get("url")
     if _url:
-        setup_ytdlp(output_root, skip_download=False, extract_flat=False)
+        setup_ytdlp(skip_download=False, extract_flat=False)
         _attempt = 0
         _max_attempt = 2
 
         while _attempt < _max_attempt:
             _attempt += 1
 
-            _info = ydl_safe_extract_info(output_root, _url)
+            _info = ydl_safe_extract_info(_url)
 
             if isinstance(_info, int):
                 return _info
 
             _ytdlp_output_file = Path(
-                output_root
+                config.ytdlp_root
                 / Path(_info.get("channel_id") or "")
                 / Path(_info.get("id") or "")
                 / "video.mkv"
@@ -773,9 +769,9 @@ def find_match(video_info: dict, source_dir: Path) -> Path | None:
     return None
 
 
-def add_to_archive(_extractor: str, _id: str, ytdlp_data_path: Path) -> None:
+def add_to_archive(_extractor: str, _id: str) -> None:
     _entry = f"{_extractor} {_id}"
-    _file = ytdlp_data_path / "download_archive.lst"
+    _file = config.ytdlp_root / "download_archive.lst"
 
     _file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -848,11 +844,7 @@ def backfill_file(
 
 
 def process_season_videos(
-    videos: list,
-    season_num: int,
-    library_season_dir: Path,
-    source_dir: Path | None,
-    ytdlp_dir: Path,
+    videos: list, season_num: int, library_season_dir: Path, source_dir: Path | None
 ):
     total_videos = len(videos)
     playlist_title = None
@@ -902,7 +894,7 @@ def process_season_videos(
             )
 
         if not _ytdlp_file.exists():
-            _ytdlp_file = download_episode(ytdlp_dir, _entry)
+            _ytdlp_file = download_episode(_entry)
 
         if _target_file.exists():
             if _target_file.with_suffix(".nfo").exists():
@@ -993,11 +985,11 @@ def process_season_videos(
         else:
             _log.msg(f"Target video file exists {_target_file}")
 
-        add_to_archive(_entry.get("extractor") or "", u_id, ytdlp_dir)
+        add_to_archive(_entry.get("extractor") or "", u_id)
 
 
 def create_year_episode_nfos(
-    channel_dir: Path, library_show_dir: Path, source_dir: Path | None = None
+    channel_dir: Path, library_show_dir: Path, year_source_dir: Path | None = None
 ):
     videos_by_year, _ = sort_videos_by_year(channel_dir)
     total_seasons = len(videos_by_year.keys())
@@ -1015,26 +1007,23 @@ def create_year_episode_nfos(
 
         videos.sort(key=lambda x: x[0])
 
-        process_season_videos(
-            videos, season_num, library_season_dir, source_dir, channel_dir.parent
-        )
+        process_season_videos(videos, season_num, library_season_dir, year_source_dir)
 
 
 def create_playlist_episode_nfos(
-    ytdlp_dir: Path,
     library_show_dir: Path,
-    source_dir: Path | None,
-    ytdlp_playlist_dir: Path,
+    playlist_source_dir: Path | None,
+    playlist_ytdlp_dir: Path,
 ):
     playlist_data = json.loads(
-        (ytdlp_playlist_dir / Path("playlist.json")).read_text(encoding="utf-8")
+        (playlist_ytdlp_dir / Path("playlist.json")).read_text(encoding="utf-8")
     )
 
     videos: list = [playlist_data[0]]
     for _entry in playlist_data:
         if _entry.get("index") != -1:
             _entry_path = (
-                ytdlp_dir
+                config.ytdlp_root
                 / Path(playlist_data[0]["channel_id"])
                 / Path(_entry.get("id"))
             )
@@ -1054,7 +1043,7 @@ def create_playlist_episode_nfos(
             else:
                 videos.append((None, None, None))
 
-    process_season_videos(videos, 1, library_show_dir, source_dir, ytdlp_dir)
+    process_season_videos(videos, 1, library_show_dir, playlist_source_dir)
 
     return
 
@@ -1064,9 +1053,7 @@ def create_playlist_episode_nfos(
 # ----------------------------
 
 
-def iter_playlist_targets(
-    playlist_data: list[dict], ytdlp_root: Path, source_dir: Path | None
-):
+def iter_playlist_targets(playlist_data: list[dict]):
     for _idx, _playlist in enumerate(playlist_data, start=0):
         if not _playlist.get("index") == -1:
             _log.msg(
@@ -1074,50 +1061,26 @@ def iter_playlist_targets(
                 f" playlist {_log._GREEN}{_idx}{_log._RESET} of {_log._BLUE}{len(playlist_data) - 1}{_log._RESET}:"
                 f" {_log._YELLOW}{_playlist.get("title") or ""}{_log._RESET} "
             )
-            yield download_playlist(_playlist.get("url") or "", ytdlp_root, source_dir)
+            yield download_playlist(_playlist.get("url") or "")
 
 
 def main():
-    # Verbosity 0
-    import argparse
-
-    from fauxjson import load_json
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--url-file", required=True)
-    parser.add_argument("--source-dir", required=False, default=None)
-    parser.add_argument("--download-dir", required=True)
-    parser.add_argument("--channel-library-dir", required=True)
-    parser.add_argument("--playlist-library-dir", required=True)
-
-    args = parser.parse_args()
-
-    urls: list[str] = load_json(args.url_file) or []
-
-    source_dir = Path(args.source_dir) if args.source_dir else None
-
-    ytdlp_root = Path(args.download_dir)
-    playlist_library_dir = Path(args.playlist_library_dir)
-    channel_library_dir = Path(args.channel_library_dir)
-
-    if urls is None:
+    if config.urls is None:
         print("Error: Unable to populate sources.")
         return
 
-    for _source_url in urls:
+    for _source_url in config.urls:
         _log.msg(f"Processing next URL: {_source_url}")
         _pl_enumerator: enumerate
 
         if _source_url.lower().startswith("playlists:"):
             _source_url = _source_url.split(":", 1)[1]
 
-            _, _, playlist_data = download_playlist(_source_url, ytdlp_root, source_dir)
-            _pl_enumerator = enumerate(
-                iter_playlist_targets(playlist_data, ytdlp_root, source_dir), start=1
-            )
+            _, _, playlist_data = download_playlist(_source_url)
+            _pl_enumerator = enumerate(iter_playlist_targets(playlist_data), start=1)
         else:
             playlist_dir, playlist_srcdir, playlist_data = download_playlist(
-                _source_url, ytdlp_root, source_dir
+                _source_url
             )
             _pl_enumerator = enumerate(
                 [(playlist_dir, playlist_srcdir, playlist_data)], start=1
@@ -1136,7 +1099,7 @@ def main():
                 channel_dir = _pl_dir.parent
                 _log.msg(f"Channel stored at {channel_dir}")
                 library_show_dir = create_tvshow_nfo(
-                    channel_dir / channel_dir.name, channel_library_dir
+                    channel_dir / channel_dir.name, config.channel_library_dir
                 )
                 _log.msg(
                     f"Show data for {_pl_data[0]["channel_id"]} stored to library at {library_show_dir}"
@@ -1152,14 +1115,14 @@ def main():
 
                 _log.msg(f"Playlist '{playlist_name}' stored at {_pl_dir}")
 
-                library_show_dir = create_tvshow_nfo(_pl_dir, playlist_library_dir)
+                library_show_dir = create_tvshow_nfo(
+                    _pl_dir, config.playlist_library_dir
+                )
                 _log.msg(
                     f"Show data for {playlist_name} stored to library at {library_show_dir}"
                 )
 
-                create_playlist_episode_nfos(
-                    ytdlp_root, library_show_dir, _pl_srcdir, _pl_dir
-                )
+                create_playlist_episode_nfos(library_show_dir, _pl_srcdir, _pl_dir)
                 _log.msg(f"Episodes and data stored to library in {library_show_dir}")
 
                 _log.msg(f"Done with {_pl_dir}.")
