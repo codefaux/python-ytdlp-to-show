@@ -475,8 +475,14 @@ def ydl_safe_extract_info(*args, **kwargs):
                 add_to_archive(_extractor, _id)
 
                 return 0
-            elif e.msg and (
-                "not available" in e.msg or "unavailable" in e.msg or "removed" in e.msg
+            elif (
+                e.msg
+                and (
+                    "not available" in e.msg
+                    or "unavailable" in e.msg
+                    or "removed" in e.msg
+                )
+                and not ("list-formats" in e.msg or "requested format" in e.msg)
             ):
                 _log.msg("Video unavailable, skipping")
                 _exc: ExtractorError = e.exc_info[
