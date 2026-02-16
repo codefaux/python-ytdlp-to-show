@@ -509,6 +509,20 @@ def ydl_safe_extract_info(*args, **kwargs):
     return int(-1)
 
 
+def download_thumbnail(ytdlp_info):
+    thumbnail_url = ytdlp_info.get("thumbnail", "")
+    if thumbnail_url:
+        _ytdlp_output_path = Path(
+            config.ytdlp_root
+            / Path(ytdlp_info.get("channel_id") or "")
+            / Path(ytdlp_info.get("id") or "")
+        )
+
+        _ret = download_file(thumbnail_url, _ytdlp_output_path, "thumbnail")
+        if _ret:
+            _log.msg(f"Downloaded thumbnail to ytdlp output:\n\tDEST: {_ret}")
+
+
 def download_episode(episode_info: dict) -> Path | int:
     _url = episode_info.get("webpage_url") or episode_info.get("url")
     if _url:
@@ -524,16 +538,17 @@ def download_episode(episode_info: dict) -> Path | int:
             if isinstance(_info, int):
                 return _info
 
-            _ytdlp_output_file = Path(
+            _ytdlp_output_path = Path(
                 config.ytdlp_root
                 / Path(_info.get("channel_id") or "")
                 / Path(_info.get("id") or "")
-                / "video.mkv"
             )
 
             _log.msg("Episode download finished.")
 
-            return _ytdlp_output_file
+            download_thumbnail(_info)
+
+            return Path(_ytdlp_output_path / "video.mkv")
 
         _log.msg("Max retries.")
         raise RuntimeError("Max download attempts exceeded")
@@ -956,6 +971,7 @@ def process_season_videos(
         )
 
         # Episode thumbnail
+        # TODO -- MOVE download_file() -thumb TO DOWNLOAD_EPISODE
         thumbnail_url = _entry.get("thumbnail", "")
         if thumbnail_url:
             _ret = download_file(
@@ -964,6 +980,7 @@ def process_season_videos(
             if _ret:
                 _log.msg(f"Downloaded thumbnail to library:\n\tDEST: {_ret}")
 
+        # TODO -- MOVE IMAGE ACQUISITION TO BACKFILL
         for _img in itertools.chain(
             _ytdlp_ep_path.iterdir(), _ytdlp_file.parent.iterdir()
         ):
