@@ -3,14 +3,12 @@
 import itertools
 import json
 import os
-import re
 import shutil
 import time
 from pathlib import Path
 
 import dateutil
 from unidecode import unidecode
-from cfsonarrmatcher import match_to_show
 import fauxlogger as _log
 import requests
 import yt_dlp
@@ -19,79 +17,19 @@ from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError, ExtractorError
 from typing import Final
 
+from cfsonarrmatcher import match_to_show
+
+from localutil import download_file, str_is_int, sanitize
 from config import config
 
 DATA_DIR = os.getenv("DATA_DIR") or "./data"
+VERBOSITY = os.getenv("YTS_VERBOSITY") or 3
+
 ytdlpconf_file = os.path.join(DATA_DIR, "yt-dlp.conf")
 cookies_file = os.path.join(DATA_DIR, "cookies.txt")
 using_ytdlpconf = os.path.exists(ytdlpconf_file)
 using_cookies = os.path.exists(cookies_file)
-VERBOSITY = os.getenv("YTS_VERBOSITY") or 3
 ytdlp_options: Final[dict] = {}
-
-# ----------------------------
-# Utility helpers
-# ----------------------------
-
-
-def get_filename_from_cd(cd: str) -> str | None:
-    """Extract filename from Content-Disposition header."""
-    if not cd:
-        return None
-    fname_match = re.findall('filename="?([^"]+)"?', cd)
-    if fname_match:
-        return fname_match[0]
-    return None
-
-
-def download_file(
-    url: str,
-    dest_dir: Path,
-    override_filename: str | None = None,
-    overwrite: bool = False,
-) -> Path | None:
-    """Download file url to path dest_dir [optionally with filename override_filename] while keeping original extension"""
-    """# download_file("https://example.com/file?id=123", Path("/home/you/Downloads"), override_filename="my_new_name")"""
-
-    dest_dir.mkdir(parents=True, exist_ok=True)
-
-    response = requests.get(url, stream=True)
-    if response.status_code == 404:
-        return None
-
-    response.raise_for_status()
-
-    # Get the server-suggested filename
-    filename = get_filename_from_cd(response.headers.get("content-disposition", ""))
-
-    if not filename:
-        filename = Path(url).name
-
-    if override_filename:
-        ext = Path(filename).suffix.split("?")[0]
-        filename = f"{override_filename}{ext}"
-
-    out_file = dest_dir / filename
-
-    if out_file.exists() and not overwrite:
-        return None
-
-    # Download the file in chunks
-    with open(out_file, "wb") as f:
-        for chunk in response.iter_content(chunk_size=8192):
-            f.write(chunk)
-
-    return out_file
-
-
-def str_is_int(str):
-    try:
-        int(str)
-        return True
-    except ValueError:
-        return False
-
-
 create_parser = yt_dlp.options.create_parser
 
 
@@ -125,18 +63,6 @@ def cli_to_api(opts: list, cli_defaults: bool = False) -> dict:
             if pp not in default_ytdlp_opts["postprocessors"]
         ]
     return diff
-
-
-def sanitize(name: str) -> str:
-    _str = re.sub(r'[\[\]\\/:*?"<>|]', "", name)
-    _str = re.sub(r"\s+", " ", _str).strip()
-    _str = re.sub(r"\W+$", "", _str)
-    return _str
-
-
-def read_url_from_file(path: Path) -> str:
-    with open(path, "r", encoding="utf-8") as f:
-        return f.readline().strip()
 
 
 def should_create_episode(video_info: dict) -> bool:
