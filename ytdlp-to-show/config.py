@@ -13,6 +13,7 @@ class ConfigData:
 
     def __init__(self):
         import argparse
+
         from fauxjson import load_json
 
         parser = argparse.ArgumentParser()
@@ -22,7 +23,7 @@ class ConfigData:
         parser.add_argument("--channel-library-dir", required=True)
         parser.add_argument("--playlist-library-dir", required=True)
         parser.add_argument("--preserve-source", required=False, default=False)
-
+        parser.add_argument("--allow-move", required=False, default=False)
         args = parser.parse_args()
 
         self.urls = load_json(args.url_file) or []
@@ -30,6 +31,7 @@ class ConfigData:
         self.ytdlp_root = Path(args.download_dir)
         self.playlist_library_dir = Path(args.playlist_library_dir)
         self.channel_library_dir = Path(args.channel_library_dir)
+        self.allow_move = bool(args.allow_move)
 
 
 config = ConfigData()

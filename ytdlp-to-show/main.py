@@ -671,7 +671,13 @@ def create_tvshow_nfo(playlist_dir: Path, library_root: Path) -> Path:
                 try:
                     os.link(_img, _dest)
                 except OSError:
-                    shutil.copy2(_img, _dest)
+                    if config.allow_move:
+                        shutil.copy2(_img, _dest)
+                    else:
+                        _log.msg(
+                            f"Could not Hardlink image to library\n\tSRC: {_img}\n\tDEST: {_dest}"
+                        )
+                        raise RuntimeError
 
     return show_dir
 
@@ -841,10 +847,16 @@ def backfill_file(
                     f"Hardlinked source-dir video to ytdlp-output\n\tSRC: {_lfile}\n\tDEST: {_ytdlp_file}"
                 )
             except OSError:
-                shutil.move(_lfile, _ytdlp_file)
-                _log.msg(
-                    f"Moved source-dir video to ytdlp-output\n\tSRC: {_lfile}\n\tDEST: {_ytdlp_file}"
-                )
+                if config.allow_move:
+                    shutil.move(_lfile, _ytdlp_file)
+                    _log.msg(
+                        f"Moved source-dir video to ytdlp-output\n\tSRC: {_lfile}\n\tDEST: {_ytdlp_file}"
+                    )
+                else:
+                    _log.msg(
+                        f"Could not Hardlink source-dir video to ytdlp-output\n\tSRC: {_lfile}\n\tDEST: {_ytdlp_file}"
+                    )
+                    raise RuntimeError
 
     return _ytdlp_file
 
@@ -964,10 +976,16 @@ def process_season_videos(
                             f"Hardlinked image to library;\n\tSRC: {_img}\n\tDEST: {_dest}"
                         )
                     except OSError:
-                        shutil.copy2(_img, _dest)
-                        _log.msg(
-                            f"Copied image to library;\n\tSRC: {_img}\n\tDEST: {_dest}"
-                        )
+                        if config.allow_move:
+                            shutil.copy2(_img, _dest)
+                            _log.msg(
+                                f"Copied image to library;\n\tSRC: {_img}\n\tDEST: {_dest}"
+                            )
+                        else:
+                            _log.msg(
+                                f"Could not Hardlink image to library\n\tSRC: {_img}\n\tDEST: {_dest}"
+                            )
+                            raise RuntimeError
                 else:
                     _log.msg(f"Image exists {_dest}")
 
@@ -981,13 +999,20 @@ def process_season_videos(
                     f"Hardlinked video to library;\n\tSRC: {_ytdlp_file}\n\tDEST: {_target_file}"
                 )
             except OSError:
-                shutil.copy2(
-                    _ytdlp_file,
-                    _target_file,
-                )
-                _log.msg(
-                    f"Copied video to library;\n\tSRC: {_ytdlp_file}\n\tDEST: {_target_file}"
-                )
+                if config.allow_move:
+                    shutil.copy2(
+                        _ytdlp_file,
+                        _target_file,
+                    )
+                    _log.msg(
+                        f"Copied video to library;\n\tSRC: {_ytdlp_file}\n\tDEST: {_target_file}"
+                    )
+                else:
+                    _log.msg(
+                        f"Could not Hardlink video to library\n\tSRC: {_ytdlp_file}\n\tDEST: {_target_file}"
+                    )
+
+                    raise RuntimeError
         else:
             _log.msg(f"Target video file exists {_target_file}")
 
