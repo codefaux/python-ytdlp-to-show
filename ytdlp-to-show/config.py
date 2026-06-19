@@ -1,15 +1,16 @@
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
 
 @dataclass
 class ConfigData:
-    urls: list[str]
-    source_dir: Path | None
-    ytdlp_root: Path
-    channel_library_dir: Path
-    playlist_library_dir: Path
-    preserve_source: bool
+    urls: Final[list[str]]
+    source_dir: Final[Path | None]
+    ytdlp_root: Final[Path]
+    channel_library_dir: Final[Path]
+    playlist_library_dir: Final[Path]
+    preserve_source: Final[bool]
 
     def __init__(self):
         import argparse
@@ -34,4 +35,4 @@ class ConfigData:
         self.allow_move = bool(args.allow_move)
 
 
-config = ConfigData()
+config: Final[ConfigData] = ConfigData()
